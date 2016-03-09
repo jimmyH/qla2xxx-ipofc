@@ -1,13 +1,12 @@
 /*
  * QLogic Fibre Channel HBA Driver
- * Copyright (c)  2003-2005 QLogic Corporation
+ * Copyright (c)  2003-2014 QLogic Corporation
  *
  * See LICENSE.qla2xxx for copyright and licensing details.
  */
 #ifndef __QLA_DEF_H
 #define __QLA_DEF_H
 
-#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/types.h>
@@ -21,62 +20,25 @@
 #include <linux/mempool.h>
 #include <linux/spinlock.h>
 #include <linux/completion.h>
-#include <asm/semaphore.h>
-#ifdef CONFIG_SCSI_QLA2XXX_FAILOVER
-#include <linux/ip.h>
-#include <linux/if_arp.h>
-#include <linux/skbuff.h>
-#endif
+#include <linux/interrupt.h>
+#include <linux/workqueue.h>
+#include <linux/firmware.h>
+#include <linux/aer.h>
+#include <linux/mutex.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_cmnd.h>
+#include <scsi/scsi_transport_fc.h>
+#include <scsi/scsi_bsg_fc.h>
 
-/* XXX(hch): move to pci_ids.h */
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP2300
-#define PCI_DEVICE_ID_QLOGIC_ISP2300	0x2300
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP2312
-#define PCI_DEVICE_ID_QLOGIC_ISP2312	0x2312
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP2322
-#define PCI_DEVICE_ID_QLOGIC_ISP2322	0x2322
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP6312
-#define PCI_DEVICE_ID_QLOGIC_ISP6312	0x6312
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP6322
-#define PCI_DEVICE_ID_QLOGIC_ISP6322	0x6322
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP2422
-#define PCI_DEVICE_ID_QLOGIC_ISP2422	0x2422
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP2432
-#define PCI_DEVICE_ID_QLOGIC_ISP2432	0x2432
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP2512
-#define PCI_DEVICE_ID_QLOGIC_ISP2512	0x2512
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP2522
-#define PCI_DEVICE_ID_QLOGIC_ISP2522	0x2522
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP5422
-#define PCI_DEVICE_ID_QLOGIC_ISP5422	0x5422
-#endif
-
-#ifndef PCI_DEVICE_ID_QLOGIC_ISP5432
-#define PCI_DEVICE_ID_QLOGIC_ISP5432	0x5432
-#endif
+#include "qla_bsg.h"
+#include "qla_nx.h"
+#include "qla_nx2.h"
+#define QLA2XXX_DRIVER_NAME	"qla2xxx"
+#define QLA2XXX_APIDEV		"ql2xapidev"
+#define QLA2XXX_MANUFACTURER	"QLogic Corporation"
 
 /*
  * We have MAILBOX_REGISTER_COUNT sized arrays in a few places,
@@ -84,6 +46,7 @@
  * ISP2100 HBAs.
  */
 #define MAILBOX_REGISTER_COUNT_2100	8
+#define MAILBOX_REGISTER_COUNT_2200	24
 #define MAILBOX_REGISTER_COUNT		32
 
 #define QLA2200A_RISC_ROM_VER	4
@@ -91,9 +54,6 @@
 #define FPM_2310		7
 
 #include "qla_settings.h"
-#ifdef CONFIG_SCSI_QLA2XXX_FAILOVER
-#include "qla_ip.h"
-#endif
 
 /*
  * Data bit definitions
@@ -140,52 +100,132 @@
 #define LSD(x)	((uint32_t)((uint64_t)(x)))
 #define MSD(x)	((uint32_t)((((uint64_t)(x)) >> 16) >> 16))
 
-/* Kernel compatibility! */
-#if !defined(__iomem)
-#define __iomem
-#endif
+#define MAKE_HANDLE(x, y) ((uint32_t)((((uint32_t)(x)) << 16) | (uint32_t)(y)))
 
 /*
  * I/O register
 */
 
-#define RD_REG_WORD(addr)		readw((void __iomem *)addr)
-#define RD_REG_DWORD(addr)		readl((void __iomem *)addr)
-#define RD_REG_WORD_RELAXED(addr)	readw_relaxed((void __iomem *)addr)
-#define RD_REG_DWORD_RELAXED(addr)	readl_relaxed((void __iomem *)addr)
+#define RD_REG_BYTE(addr)		readb(addr)
+#define RD_REG_WORD(addr)		readw(addr)
+#define RD_REG_DWORD(addr)		readl(addr)
+#define RD_REG_BYTE_RELAXED(addr)	readb_relaxed(addr)
+#define RD_REG_WORD_RELAXED(addr)	readw_relaxed(addr)
+#define RD_REG_DWORD_RELAXED(addr)	readl_relaxed(addr)
+#define WRT_REG_BYTE(addr, data)	writeb(data,addr)
 #define WRT_REG_WORD(addr, data)	writew(data,addr)
 #define WRT_REG_DWORD(addr, data)	writel(data,addr)
-#ifdef CONFIG_SCSI_QLA2XXX_FAILOVER
+
+/*
+ * ISP83XX specific remote register addresses
+ */
+#define QLA83XX_LED_PORT0			0x00201320
+#define QLA83XX_LED_PORT1			0x00201328
+#define QLA83XX_IDC_DEV_STATE		0x22102384
+#define QLA83XX_IDC_MAJOR_VERSION	0x22102380
+#define QLA83XX_IDC_MINOR_VERSION	0x22102398
+#define QLA83XX_IDC_DRV_PRESENCE	0x22102388
+#define QLA83XX_IDC_DRIVER_ACK		0x2210238c
+#define QLA83XX_IDC_CONTROL			0x22102390
+#define QLA83XX_IDC_AUDIT			0x22102394
+#define QLA83XX_IDC_LOCK_RECOVERY	0x2210239c
+#define QLA83XX_DRIVER_LOCKID		0x22102104
+#define QLA83XX_DRIVER_LOCK			0x8111c028
+#define QLA83XX_DRIVER_UNLOCK		0x8111c02c
+#define QLA83XX_FLASH_LOCKID		0x22102100
+#define QLA83XX_FLASH_LOCK			0x8111c010
+#define QLA83XX_FLASH_UNLOCK		0x8111c014
+#define QLA83XX_DEV_PARTINFO1		0x221023e0
+#define QLA83XX_DEV_PARTINFO2		0x221023e4
+#define QLA83XX_FW_HEARTBEAT		0x221020b0
+#define QLA83XX_PEG_HALT_STATUS1	0x221020a8
+#define QLA83XX_PEG_HALT_STATUS2	0x221020ac
+
+/* 83XX: Macros defining 8200 AEN Reason codes */
+#define IDC_DEVICE_STATE_CHANGE BIT_0
+#define IDC_PEG_HALT_STATUS_CHANGE BIT_1
+#define IDC_NIC_FW_REPORTED_FAILURE BIT_2
+#define IDC_HEARTBEAT_FAILURE BIT_3
+
+/* 83XX: Macros defining 8200 AEN Error-levels */
+#define ERR_LEVEL_NON_FATAL 0x1
+#define ERR_LEVEL_RECOVERABLE_FATAL 0x2
+#define ERR_LEVEL_UNRECOVERABLE_FATAL 0x4
+
+/* 83XX: Macros for IDC Version */
+#define QLA83XX_SUPP_IDC_MAJOR_VERSION 0x01
+#define QLA83XX_SUPP_IDC_MINOR_VERSION 0x0
+
+/* 83XX: Macros for scheduling dpc tasks */
+#define QLA83XX_NIC_CORE_RESET 0x1
+#define QLA83XX_IDC_STATE_HANDLER 0x2
+#define QLA83XX_NIC_CORE_UNRECOVERABLE 0x3
+
+/* 83XX: Macros for defining IDC-Control bits */
+#define QLA83XX_IDC_RESET_DISABLED BIT_0
+#define QLA83XX_IDC_GRACEFUL_RESET BIT_1
+
+/* 83XX: Macros for different timeouts */
+#define QLA83XX_IDC_INITIALIZATION_TIMEOUT 30
+#define QLA83XX_IDC_RESET_ACK_TIMEOUT 10
+#define QLA83XX_MAX_LOCK_RECOVERY_WAIT (2 * HZ)
+
+/* 83XX: Macros for defining class in DEV-Partition Info register */
+#define QLA83XX_CLASS_TYPE_NONE		0x0
+#define QLA83XX_CLASS_TYPE_NIC		0x1
+#define QLA83XX_CLASS_TYPE_FCOE		0x2
+#define QLA83XX_CLASS_TYPE_ISCSI	0x3
+
+/* 83XX: Macros for IDC Lock-Recovery stages */
+#define IDC_LOCK_RECOVERY_STAGE1	0x1 /* Stage1: Intent for
+					     * lock-recovery
+					     */
+#define IDC_LOCK_RECOVERY_STAGE2	0x2 /* Stage2: Perform lock-recovery */
+
+/* 83XX: Macros for IDC Audit type */
+#define IDC_AUDIT_TIMESTAMP		0x0 /* IDC-AUDIT: Record timestamp of
+					     * dev-state change to NEED-RESET
+					     * or NEED-QUIESCENT
+					     */
+#define IDC_AUDIT_COMPLETION		0x1 /* IDC-AUDIT: Record duration of
+					     * reset-recovery completion is
+					     * second
+					     */
+/* ISP2031: Values for laser on/off */
+#define PORT_0_2031	0x00201340
+#define PORT_1_2031	0x00201350
+#define LASER_ON_2031	0x01800100
+#define LASER_OFF_2031	0x01800180
+
+/* ISP27XX: Values for Laser ON/Off */
+#define LASER_ON_27XX	0x00400000
+#define LASER_OFF_27XX	0x00400040
+
 /*
  * The ISP2312 v2 chip cannot access the FLASH/GPIO registers via MMIO in an
  * 133Mhz slot.
  */
 #define RD_REG_WORD_PIO(addr)		(inw((unsigned long)addr))
 #define WRT_REG_WORD_PIO(addr, data)	(outw(data,(unsigned long)addr))
-#endif
 
 /*
  * Fibre Channel device definitions.
  */
 #define WWN_SIZE		8	/* Size of WWPN, WWN & WWNN */
-#define MAX_FIBRE_DEVICES	512
-#define MAX_FIBRE_LUNS  	4096
-#define	MAX_RSCN_COUNT		32
+#define MAX_FIBRE_DEVICES_2100	512
+#define MAX_FIBRE_DEVICES_2400	2048
+#define MAX_FIBRE_DEVICES_LOOP	128
+#define MAX_FIBRE_DEVICES_MAX	MAX_FIBRE_DEVICES_2400
+#define LOOPID_MAP_SIZE		(ha->max_fibre_devices)
+#define MAX_FIBRE_LUNS  	0xFFFF
 #define	MAX_HOST_COUNT		16
-#define LUN_CHUNK_SIZE		256
-#define TOTAL_256_LUN_CHUNKS    (MAX_FIBRE_LUNS / LUN_CHUNK_SIZE)
-#define LUN_MASK		(MAX_FIBRE_LUNS - 1) /* MAX_FIBRE_LUNS should
-						        be multiple of 2 */
+
 /*
  * Host adapter default definitions.
  */
 #define MAX_BUSES		1  /* We only have one bus today */
-#define MAX_TARGETS_2100	MAX_FIBRE_DEVICES
-#define MAX_TARGETS_2200	MAX_FIBRE_DEVICES
-#define MAX_TARGETS		MAX_FIBRE_DEVICES
 #define MIN_LUNS		8
 #define MAX_LUNS		MAX_FIBRE_LUNS
-#define OLD_MAX_LUNS		256
 #define MAX_CMDS_PER_LUN	255
 
 /*
@@ -201,7 +241,6 @@
 #define SNS_FIRST_LOOP_ID	0x81
 #define MANAGEMENT_SERVER	0xfe
 #define BROADCAST		0xff
-#define BROADCAST_4G		0x7ff
 
 /*
  * There is no correspondence between an N-PORT id and an AL_PA.  Therefore the
@@ -216,134 +255,202 @@
 
 #define MAX_CMDSZ	16		/* SCSI maximum CDB size. */
 #include "qla_fw.h"
-
 /*
  * Timeout timer counts in seconds
  */
-#define PORT_RETRY_TIME			2
+#define PORT_RETRY_TIME			1
 #define LOOP_DOWN_TIMEOUT		60
 #define LOOP_DOWN_TIME			255	/* 240 */
 #define	LOOP_DOWN_RESET			(LOOP_DOWN_TIME - 30)
 
-/* Maximum outstanding commands in ISP queues (1-65535) */
-#define MAX_OUTSTANDING_COMMANDS	1024
+#define DEFAULT_OUTSTANDING_COMMANDS	1024
+#define MIN_OUTSTANDING_COMMANDS	128
 
 /* ISP request and response entry counts (37-65535) */
 #define REQUEST_ENTRY_CNT_2100		128	/* Number of request entries. */
 #define REQUEST_ENTRY_CNT_2200		2048	/* Number of request entries. */
-#define REQUEST_ENTRY_CNT_2XXX_EXT_MEM	4096	/* Number of request entries. */
-#define REQUEST_ENTRY_CNT_24XX		4096	/* Number of request entries. */
+#define REQUEST_ENTRY_CNT_24XX		2048	/* Number of request entries. */
 #define RESPONSE_ENTRY_CNT_2100		64	/* Number of response entries.*/
 #define RESPONSE_ENTRY_CNT_2300		512	/* Number of response entries.*/
+#define RESPONSE_ENTRY_CNT_MQ		128	/* Number of response entries.*/
+#define ATIO_ENTRY_CNT_24XX		4096	/* Number of ATIO entries. */
+#define RESPONSE_ENTRY_CNT_FX00		256     /* Number of response entries.*/
+
+struct req_que;
+
+/*
+ * (sd.h is not exported, hence local inclusion)
+ * Data Integrity Field tuple.
+ */
+struct sd_dif_tuple {
+	__be16 guard_tag;	/* Checksum */
+	__be16 app_tag;		/* Opaque storage */
+	__be32 ref_tag;		/* Target LBA or indirect LBA */
+};
 
 /*
  * SCSI Request Block
  */
-typedef struct srb {
-	struct list_head list;
-
-	struct scsi_qla_host *ha;	/* HA the SP is queued on */
-
+struct srb_cmd {
 	struct scsi_cmnd *cmd;		/* Linux SCSI command pkt */
-
-	struct timer_list timer;	/* Command timer */
-	atomic_t ref_count;	/* Reference count for this structure */
-	uint16_t flags;
-
-	/* Request state */
-	uint16_t state;
-
-	/* Target/LUN queue pointers. */
-	struct os_tgt *tgt_queue;	/* ptr to visible ha's target */
-	struct os_lun *lun_queue;	/* ptr to visible ha's lun */
-	struct fc_lun *fclun;		/* FC LUN context pointer. */
-
-	/* Timing counts. */
-	unsigned long e_start;		/* Start of extend timeout */
-	unsigned long r_start;		/* Start of request */
-	unsigned long u_start;		/* When sent to RISC */
-	unsigned long f_start;		/* When placed in FO queue*/
-
-	/* Single transfer DMA context */
-	dma_addr_t dma_handle;
-
 	uint32_t request_sense_length;
+	uint32_t fw_sense_length;
 	uint8_t *request_sense_ptr;
-
-	int ext_history;
-
-	/* Suspend delay */
-	int delay;
-
-	/* Raw completion info for use by failover ? */
-	uint8_t	fo_retry_cnt;		/* Retry count this request */
-	uint8_t	err_id;			/* error id */
-#define SRB_ERR_PORT	1		/* Request failed -- "port down" */
-#define SRB_ERR_LOOP	2		/* Request failed -- "loop down" */
-#define SRB_ERR_DEVICE	3		/* Request failed -- "device error" */
-#define SRB_ERR_OTHER	4
-#define SRB_ERR_RETRY	5
-
-	/* SRB magic number */
-	uint16_t magic;
-#define SRB_MAGIC       0x10CB
-} srb_t;
+	void *ctx;
+};
 
 /*
  * SRB flag definitions
  */
-#define SRB_TIMEOUT		BIT_0	/* Command timed out */
-#define SRB_DMA_VALID		BIT_1	/* Command sent to ISP */
-#define SRB_WATCHDOG		BIT_2	/* Command on watchdog list */
-#define SRB_ABORT_PENDING	BIT_3	/* Command abort sent to device */
+#define SRB_DMA_VALID			BIT_0	/* Command sent to ISP */
+#define SRB_FCP_CMND_DMA_VALID		BIT_12	/* DIF: DSD List valid */
+#define SRB_CRC_CTX_DMA_VALID		BIT_2	/* DIF: context DMA valid */
+#define SRB_CRC_PROT_DMA_VALID		BIT_4	/* DIF: prot DMA valid */
+#define SRB_CRC_CTX_DSD_VALID		BIT_5	/* DIF: dsd_list valid */
 
-#define SRB_ABORTED		BIT_4	/* Command aborted command already */
-#define SRB_RETRY		BIT_5	/* Command needs retrying */
-#define SRB_GOT_SENSE		BIT_6	/* Command has sense data */
-#define SRB_FAILOVER		BIT_7	/* Command in failover state */
-
-#define SRB_BUSY		BIT_8	/* Command is in busy retry state */
-#define SRB_FO_CANCEL		BIT_9	/* Command don't need to do failover */
-#define SRB_IOCTL		BIT_10	/* IOCTL command. */
-#define SRB_TAPE		BIT_11	/* FCP2 (Tape) command. */
-#define SRB_NO_TIMER		BIT_12
+/* To identify if a srb is of T10-CRC type. @sp => srb_t pointer */
+#define IS_PROT_IO(sp)	(sp->flags & SRB_CRC_CTX_DSD_VALID)
 
 /*
- * SRB state definitions
+ * SRB extensions.
  */
-#define SRB_FREE_STATE		0	/*   returned back */
-#define SRB_PENDING_STATE	1	/*   queued in LUN Q */
-#define SRB_ACTIVE_STATE	2	/*   in Active Array */
-#define SRB_DONE_STATE		3	/*   queued in Done Queue */
-#define SRB_RETRY_STATE		4	/*   in Retry Queue */
-#define SRB_SUSPENDED_STATE	5	/*   in suspended state */
-#define SRB_NO_QUEUE_STATE	6	/*   is in between states */
-#define SRB_ACTIVE_TIMEOUT_STATE 7	/*   in Active Array but timed out */
-#define SRB_FAILOVER_STATE	8	/*   in Failover Queue */
-#define SRB_SCSI_RETRY_STATE	9	/*   in Scsi Retry Queue */
+struct srb_iocb {
+	union {
+		struct {
+			uint16_t flags;
+#define SRB_LOGIN_RETRIED	BIT_0
+#define SRB_LOGIN_COND_PLOGI	BIT_1
+#define SRB_LOGIN_SKIP_PRLI	BIT_2
+			uint16_t data[2];
+		} logio;
+		struct {
+			/*
+			 * Values for flags field below are as
+			 * defined in tsk_mgmt_entry struct
+			 * for control_flags field in qla_fw.h.
+			 */
+			uint32_t flags;
+			uint32_t lun;
+			uint32_t data;
+			struct completion comp;
+			__le16 comp_status;
+		} tmf;
+		struct {
+#define SRB_FXDISC_REQ_DMA_VALID	BIT_0
+#define SRB_FXDISC_RESP_DMA_VALID	BIT_1
+#define SRB_FXDISC_REQ_DWRD_VALID	BIT_2
+#define SRB_FXDISC_RSP_DWRD_VALID	BIT_3
+#define FXDISC_TIMEOUT 20
+			uint8_t flags;
+			uint32_t req_len;
+			uint32_t rsp_len;
+			void *req_addr;
+			void *rsp_addr;
+			dma_addr_t req_dma_handle;
+			dma_addr_t rsp_dma_handle;
+			__le32 adapter_id;
+			__le32 adapter_id_hi;
+			__le16 req_func_type;
+			__le32 req_data;
+			__le32 req_data_extra;
+			__le32 result;
+			__le32 seq_number;
+			__le16 fw_flags;
+			struct completion fxiocb_comp;
+			__le32 reserved_0;
+			uint8_t reserved_1;
+		} fxiocb;
+		struct {
+			uint32_t cmd_hndl;
+			__le16 comp_status;
+			struct completion comp;
+		} abt;
+	} u;
 
+	struct timer_list timer;
+	void (*timeout)(void *);
+};
+
+/* Values for srb_ctx type */
+#define SRB_LOGIN_CMD	1
+#define SRB_LOGOUT_CMD	2
+#define SRB_ELS_CMD_RPT 3
+#define SRB_ELS_CMD_HST 4
+#define SRB_CT_CMD	5
+#define SRB_ADISC_CMD	6
+#define SRB_TM_CMD	7
+#define SRB_SCSI_CMD	8
+#define SRB_BIDI_CMD	9
+#define SRB_FXIOCB_DCMD	10
+#define SRB_FXIOCB_BCMD	11
+#define SRB_ABT_CMD	12
+
+
+typedef struct srb {
+	atomic_t ref_count;
+	struct fc_port *fcport;
+	uint32_t handle;
+	uint16_t flags;
+	uint16_t type;
+	char *name;
+	int iocbs;
+	union {
+		struct srb_iocb iocb_cmd;
+		struct fc_bsg_job *bsg_job;
+		struct srb_cmd scmd;
+	} u;
+	void (*done)(void *, void *, int);
+	void (*free)(void *, void *);
+} srb_t;
+
+#define GET_CMD_SP(sp) (sp->u.scmd.cmd)
+#define SET_CMD_SP(sp, cmd) (sp->u.scmd.cmd = cmd)
+#define GET_CMD_CTX_SP(sp) (sp->u.scmd.ctx)
+
+#define GET_CMD_SENSE_LEN(sp) \
+	(sp->u.scmd.request_sense_length)
+#define SET_CMD_SENSE_LEN(sp, len) \
+	(sp->u.scmd.request_sense_length = len)
+#define GET_CMD_SENSE_PTR(sp) \
+	(sp->u.scmd.request_sense_ptr)
+#define SET_CMD_SENSE_PTR(sp, ptr) \
+	(sp->u.scmd.request_sense_ptr = ptr)
+#define GET_FW_SENSE_LEN(sp) \
+	(sp->u.scmd.fw_sense_length)
+#define SET_FW_SENSE_LEN(sp, len) \
+	(sp->u.scmd.fw_sense_length = len)
+
+struct msg_echo_lb {
+	dma_addr_t send_dma;
+	dma_addr_t rcv_dma;
+	uint16_t req_sg_cnt;
+	uint16_t rsp_sg_cnt;
+	uint16_t options;
+	uint32_t transfer_size;
+	uint32_t iteration_count;
+};
 
 /*
  * ISP I/O Register Set structure definitions.
  */
-typedef volatile struct {
-	volatile uint16_t flash_address; /* Flash BIOS address */
-	volatile uint16_t flash_data;	/* Flash BIOS data */
+struct device_reg_2xxx {
+	uint16_t flash_address; 	/* Flash BIOS address */
+	uint16_t flash_data;		/* Flash BIOS data */
 	uint16_t unused_1[1];		/* Gap */
-	volatile uint16_t ctrl_status;	/* Control/Status */
+	uint16_t ctrl_status;		/* Control/Status */
 #define CSR_FLASH_64K_BANK	BIT_3	/* Flash upper 64K bank select */
 #define CSR_FLASH_ENABLE	BIT_1	/* Flash BIOS Read/Write enable */
 #define CSR_ISP_SOFT_RESET	BIT_0	/* ISP soft reset */
 
-	volatile uint16_t ictrl;	/* Interrupt control */
+	uint16_t ictrl;			/* Interrupt control */
 #define ICR_EN_INT		BIT_15	/* ISP enable interrupts. */
 #define ICR_EN_RISC		BIT_3	/* ISP enable RISC interrupts. */
 
-	volatile uint16_t istatus;	/* Interrupt status */
+	uint16_t istatus;		/* Interrupt status */
 #define ISR_RISC_INT		BIT_3	/* RISC interrupt */
 
-	volatile uint16_t semaphore;	/* Semaphore */
-	volatile uint16_t nvram;	/* NVRAM register. */
+	uint16_t semaphore;		/* Semaphore */
+	uint16_t nvram;			/* NVRAM register. */
 #define NVR_DESELECT		0
 #define NVR_BUSY		BIT_15
 #define NVR_WRT_ENABLE		BIT_14	/* Write enable */
@@ -357,78 +464,80 @@ typedef volatile struct {
 
 	union {
 		struct {
-			volatile uint16_t mailbox0;
-			volatile uint16_t mailbox1;
-			volatile uint16_t mailbox2;
-			volatile uint16_t mailbox3;
-			volatile uint16_t mailbox4;
-			volatile uint16_t mailbox5;
-			volatile uint16_t mailbox6;
-			volatile uint16_t mailbox7;
-			uint16_t unused_2[59];		/* Gap */
+			uint16_t mailbox0;
+			uint16_t mailbox1;
+			uint16_t mailbox2;
+			uint16_t mailbox3;
+			uint16_t mailbox4;
+			uint16_t mailbox5;
+			uint16_t mailbox6;
+			uint16_t mailbox7;
+			uint16_t unused_2[59];	/* Gap */
 		} __attribute__((packed)) isp2100;
 		struct {
-							/* Request Queue */
-			volatile uint16_t req_q_in;	/*  In-Pointer */
-			volatile uint16_t req_q_out;	/*  Out-Pointer */
-							/* Response Queue */
-			volatile uint16_t rsp_q_in;	/*  In-Pointer */
-			volatile uint16_t rsp_q_out;	/*  Out-Pointer */
+						/* Request Queue */
+			uint16_t req_q_in;	/*  In-Pointer */
+			uint16_t req_q_out;	/*  Out-Pointer */
+						/* Response Queue */
+			uint16_t rsp_q_in;	/*  In-Pointer */
+			uint16_t rsp_q_out;	/*  Out-Pointer */
 
 						/* RISC to Host Status */
-			volatile uint32_t host_status;
+			uint32_t host_status;
 #define HSR_RISC_INT		BIT_15	/* RISC interrupt */
 #define HSR_RISC_PAUSED		BIT_8	/* RISC Paused */
 
 					/* Host to Host Semaphore */
-			volatile uint16_t host_semaphore;
-			uint16_t unused_3[17];		/* Gap */
-			volatile uint16_t mailbox0;
-			volatile uint16_t mailbox1;
-			volatile uint16_t mailbox2;
-			volatile uint16_t mailbox3;
-			volatile uint16_t mailbox4;
-			volatile uint16_t mailbox5;
-			volatile uint16_t mailbox6;
-			volatile uint16_t mailbox7;
-			volatile uint16_t mailbox8;
-			volatile uint16_t mailbox9;
-			volatile uint16_t mailbox10;
-			volatile uint16_t mailbox11;
-			volatile uint16_t mailbox12;
-			volatile uint16_t mailbox13;
-			volatile uint16_t mailbox14;
-			volatile uint16_t mailbox15;
-			volatile uint16_t mailbox16;
-			volatile uint16_t mailbox17;
-			volatile uint16_t mailbox18;
-			volatile uint16_t mailbox19;
-			volatile uint16_t mailbox20;
-			volatile uint16_t mailbox21;
-			volatile uint16_t mailbox22;
-			volatile uint16_t mailbox23;
-			volatile uint16_t mailbox24;
-			volatile uint16_t mailbox25;
-			volatile uint16_t mailbox26;
-			volatile uint16_t mailbox27;
-			volatile uint16_t mailbox28;
-			volatile uint16_t mailbox29;
-			volatile uint16_t mailbox30;
-			volatile uint16_t mailbox31;
-			volatile uint16_t fb_cmd;
-			uint16_t unused_4[10];		/* Gap */
+			uint16_t host_semaphore;
+			uint16_t unused_3[17];	/* Gap */
+			uint16_t mailbox0;
+			uint16_t mailbox1;
+			uint16_t mailbox2;
+			uint16_t mailbox3;
+			uint16_t mailbox4;
+			uint16_t mailbox5;
+			uint16_t mailbox6;
+			uint16_t mailbox7;
+			uint16_t mailbox8;
+			uint16_t mailbox9;
+			uint16_t mailbox10;
+			uint16_t mailbox11;
+			uint16_t mailbox12;
+			uint16_t mailbox13;
+			uint16_t mailbox14;
+			uint16_t mailbox15;
+			uint16_t mailbox16;
+			uint16_t mailbox17;
+			uint16_t mailbox18;
+			uint16_t mailbox19;
+			uint16_t mailbox20;
+			uint16_t mailbox21;
+			uint16_t mailbox22;
+			uint16_t mailbox23;
+			uint16_t mailbox24;
+			uint16_t mailbox25;
+			uint16_t mailbox26;
+			uint16_t mailbox27;
+			uint16_t mailbox28;
+			uint16_t mailbox29;
+			uint16_t mailbox30;
+			uint16_t mailbox31;
+			uint16_t fb_cmd;
+			uint16_t unused_4[10];	/* Gap */
 		} __attribute__((packed)) isp2300;
 	} u;
 
-	volatile uint16_t fpm_diag_config;
-	uint16_t unused_5[0x6];		/* Gap */
-	volatile uint16_t pcr;		/* Processor Control Register. */
+	uint16_t fpm_diag_config;
+	uint16_t unused_5[0x4];		/* Gap */
+	uint16_t risc_hw;
+	uint16_t unused_5_1;		/* Gap */
+	uint16_t pcr;			/* Processor Control Register. */
 	uint16_t unused_6[0x5];		/* Gap */
-	volatile uint16_t mctr;		/* Memory Configuration and Timing. */
+	uint16_t mctr;			/* Memory Configuration and Timing. */
 	uint16_t unused_7[0x3];		/* Gap */
-	volatile uint16_t fb_cmd_2100;	/* Unused on 23XX */
+	uint16_t fb_cmd_2100;		/* Unused on 23XX */
 	uint16_t unused_8[0x3];		/* Gap */
-	volatile uint16_t hccr;		/* Host command & control register. */
+	uint16_t hccr;			/* Host command & control register. */
 #define HCCR_HOST_INT		BIT_7	/* Host interrupt bit */
 #define HCCR_RISC_PAUSE		BIT_5	/* Pause mode bit */
 					/* HCCR commands */
@@ -442,9 +551,9 @@ typedef volatile struct {
 #define HCCR_ENABLE_PARITY	0xA000	/* Enable PARITY interrupt */
 
 	uint16_t unused_9[5];		/* Gap */
-	volatile uint16_t gpiod;	/* GPIO Data register. */
-	volatile uint16_t gpioe;	/* GPIO Enable register. */
-#define GPIO_LED_MASK			0x00C1
+	uint16_t gpiod;			/* GPIO Data register. */
+	uint16_t gpioe;			/* GPIO Enable register. */
+#define GPIO_LED_MASK			0x00C0
 #define GPIO_LED_GREEN_OFF_AMBER_OFF	0x0000
 #define GPIO_LED_GREEN_ON_AMBER_OFF	0x0040
 #define GPIO_LED_GREEN_OFF_AMBER_ON	0x0080
@@ -455,26 +564,106 @@ typedef volatile struct {
 
 	union {
 		struct {
-			uint16_t unused_10[8];		/* Gap */
-			volatile uint16_t mailbox8;
-			volatile uint16_t mailbox9;
-			volatile uint16_t mailbox10;
-			volatile uint16_t mailbox11;
-			volatile uint16_t mailbox12;
-			volatile uint16_t mailbox13;
-			volatile uint16_t mailbox14;
-			volatile uint16_t mailbox15;
-			volatile uint16_t mailbox16;
-			volatile uint16_t mailbox17;
-			volatile uint16_t mailbox18;
-			volatile uint16_t mailbox19;
-			volatile uint16_t mailbox20;
-			volatile uint16_t mailbox21;
-			volatile uint16_t mailbox22;
-			volatile uint16_t mailbox23;	/* Also probe reg. */
+			uint16_t unused_10[8];	/* Gap */
+			uint16_t mailbox8;
+			uint16_t mailbox9;
+			uint16_t mailbox10;
+			uint16_t mailbox11;
+			uint16_t mailbox12;
+			uint16_t mailbox13;
+			uint16_t mailbox14;
+			uint16_t mailbox15;
+			uint16_t mailbox16;
+			uint16_t mailbox17;
+			uint16_t mailbox18;
+			uint16_t mailbox19;
+			uint16_t mailbox20;
+			uint16_t mailbox21;
+			uint16_t mailbox22;
+			uint16_t mailbox23;	/* Also probe reg. */
 		} __attribute__((packed)) isp2200;
 	} u_end;
-} device_reg_t;
+};
+
+struct device_reg_25xxmq {
+	uint32_t req_q_in;
+	uint32_t req_q_out;
+	uint32_t rsp_q_in;
+	uint32_t rsp_q_out;
+	uint32_t atio_q_in;
+	uint32_t atio_q_out;
+};
+
+
+struct device_reg_fx00 {
+	uint32_t mailbox0;		/* 00 */
+	uint32_t mailbox1;		/* 04 */
+	uint32_t mailbox2;		/* 08 */
+	uint32_t mailbox3;		/* 0C */
+	uint32_t mailbox4;		/* 10 */
+	uint32_t mailbox5;		/* 14 */
+	uint32_t mailbox6;		/* 18 */
+	uint32_t mailbox7;		/* 1C */
+	uint32_t mailbox8;		/* 20 */
+	uint32_t mailbox9;		/* 24 */
+	uint32_t mailbox10;		/* 28 */
+	uint32_t mailbox11;
+	uint32_t mailbox12;
+	uint32_t mailbox13;
+	uint32_t mailbox14;
+	uint32_t mailbox15;
+	uint32_t mailbox16;
+	uint32_t mailbox17;
+	uint32_t mailbox18;
+	uint32_t mailbox19;
+	uint32_t mailbox20;
+	uint32_t mailbox21;
+	uint32_t mailbox22;
+	uint32_t mailbox23;
+	uint32_t mailbox24;
+	uint32_t mailbox25;
+	uint32_t mailbox26;
+	uint32_t mailbox27;
+	uint32_t mailbox28;
+	uint32_t mailbox29;
+	uint32_t mailbox30;
+	uint32_t mailbox31;
+	uint32_t aenmailbox0;
+	uint32_t aenmailbox1;
+	uint32_t aenmailbox2;
+	uint32_t aenmailbox3;
+	uint32_t aenmailbox4;
+	uint32_t aenmailbox5;
+	uint32_t aenmailbox6;
+	uint32_t aenmailbox7;
+	/* Request Queue. */
+	uint32_t req_q_in;		/* A0 - Request Queue In-Pointer */
+	uint32_t req_q_out;		/* A4 - Request Queue Out-Pointer */
+	/* Response Queue. */
+	uint32_t rsp_q_in;		/* A8 - Response Queue In-Pointer */
+	uint32_t rsp_q_out;		/* AC - Response Queue Out-Pointer */
+	/* Init values shadowed on FW Up Event */
+	uint32_t initval0;		/* B0 */
+	uint32_t initval1;		/* B4 */
+	uint32_t initval2;		/* B8 */
+	uint32_t initval3;		/* BC */
+	uint32_t initval4;		/* C0 */
+	uint32_t initval5;		/* C4 */
+	uint32_t initval6;		/* C8 */
+	uint32_t initval7;		/* CC */
+	uint32_t fwheartbeat;		/* D0 */
+	uint32_t pseudoaen;		/* D4 */
+};
+
+
+
+typedef union {
+		struct device_reg_2xxx isp;
+		struct device_reg_24xx isp24;
+		struct device_reg_25xxmq isp25mq;
+		struct device_reg_82xx isp82;
+		struct device_reg_fx00 ispfx00;
+} __iomem device_reg_t;
 
 #define ISP_REQ_Q_IN(ha, reg) \
 	(IS_QLA2100(ha) || IS_QLA2200(ha) ? \
@@ -492,6 +681,9 @@ typedef volatile struct {
 	(IS_QLA2100(ha) || IS_QLA2200(ha) ? \
 	 &(reg)->u.isp2100.mailbox5 : \
 	 &(reg)->u.isp2300.rsp_q_out)
+
+#define ISP_ATIO_Q_IN(vha) (vha->hw->tgt.atio_q_in)
+#define ISP_ATIO_Q_OUT(vha) (vha->hw->tgt.atio_q_out)
 
 #define MAILBOX_REG(ha, reg, num) \
 	(IS_QLA2100(ha) || IS_QLA2200(ha) ? \
@@ -525,6 +717,20 @@ typedef struct {
 #define	MBX_DMA_OUT	BIT_1
 #define IOCTL_CMD	BIT_2
 } mbx_cmd_t;
+
+struct mbx_cmd_32 {
+	uint32_t	out_mb;		/* outbound from driver */
+	uint32_t	in_mb;			/* Incoming from RISC */
+	uint32_t	mb[MAILBOX_REGISTER_COUNT];
+	long		buf_size;
+	void		*bufp;
+	uint32_t	tov;
+	uint8_t		flags;
+#define MBX_DMA_IN	BIT_0
+#define	MBX_DMA_OUT	BIT_1
+#define IOCTL_CMD	BIT_2
+};
+
 
 #define	MBX_TOV_SECONDS	30
 
@@ -601,7 +807,34 @@ typedef struct {
 #define MBA_BYPASS_NOTIFICATION	0x8043	/* Auto bypass notification. */
 #define MBA_DISCARD_RND_FRAME	0x8048	/* discard RND frame due to error. */
 #define MBA_REJECTED_FCP_CMD	0x8049	/* rejected FCP_CMD. */
+#define MBA_FW_NOT_STARTED	0x8050	/* Firmware not started */
+#define MBA_FW_STARTING		0x8051	/* Firmware starting */
+#define MBA_FW_RESTART_CMPLT	0x8060	/* Firmware restart complete */
+#define MBA_INIT_REQUIRED	0x8061	/* Initialization required */
+#define MBA_SHUTDOWN_REQUESTED	0x8062	/* Shutdown Requested */
+#define MBA_DPORT_DIAGNOSTICS	0x8080	/* D-port Diagnostics */
+#define MBA_FW_INIT_FAILURE	0x8401	/* Firmware initialization failure */
+#define MBA_MIRROR_LUN_CHANGE	0x8402	/* Mirror LUN State Change
+					   Notification */
+#define MBA_FW_POLL_STATE	0x8600  /* Firmware in poll diagnostic state */
+#define MBA_FW_RESET_FCT	0x8502	/* Firmware reset factory defaults */
+#define MBA_FW_INIT_INPROGRESS	0x8500	/* Firmware boot in progress */
+/* 83XX FCoE specific */
+#define MBA_IDC_AEN		0x8200  /* FCoE: NIC Core state change AEN */
 
+/* Interrupt type codes */
+#define INTR_ROM_MB_SUCCESS		0x1
+#define INTR_ROM_MB_FAILED		0x2
+#define INTR_MB_SUCCESS			0x10
+#define INTR_MB_FAILED			0x11
+#define INTR_ASYNC_EVENT		0x12
+#define INTR_RSP_QUE_UPDATE		0x13
+#define INTR_RSP_QUE_UPDATE_83XX	0x14
+#define INTR_ATIO_QUE_UPDATE		0x1C
+#define INTR_ATIO_RSP_QUE_UPDATE	0x1D
+
+/* ISP mailbox loopback echo diagnostic error code */
+#define MBS_LB_RESET	0x17
 /*
  * Firmware options 1, 2, 3.
  */
@@ -639,7 +872,6 @@ typedef struct {
  */
 #define MBC_LOAD_RAM			1	/* Load RAM. */
 #define MBC_EXECUTE_FIRMWARE		2	/* Execute firmware. */
-#define MBC_WRITE_RAM_WORD		4	/* Write RAM word. */
 #define MBC_READ_RAM_WORD		5	/* Read RAM word. */
 #define MBC_MAILBOX_REGISTER_TEST	6	/* Wrap incoming mailboxes */
 #define MBC_VERIFY_CHECKSUM		7	/* Verify checksum. */
@@ -670,12 +902,14 @@ typedef struct {
 #define MBC_DIAGNOSTIC_LOOP_BACK	0x45	/* Diagnostic loop back. */
 #define MBC_ONLINE_SELF_TEST		0x46	/* Online self-test. */
 #define MBC_ENHANCED_GET_PORT_DATABASE	0x47	/* Get port database + login */
+#define MBC_CONFIGURE_VF		0x4b	/* Configure VFs */
 #define MBC_RESET_LINK_STATUS		0x52	/* Reset Link Error Status */
 #define MBC_IOCB_COMMAND_A64		0x54	/* Execute IOCB command (64) */
+#define MBC_PORT_LOGOUT			0x56	/* Port Logout request */
 #define MBC_SEND_RNID_ELS		0x57	/* Send RNID ELS request */
 #define MBC_SET_RNID_PARAMS		0x59	/* Set RNID parameters */
-#define MBC_GET_RNID_PARAMS		0x5a	/* Data Rate */
-#define MBC_DATA_RATE			0x5d	/* Get RNID parameters */
+#define MBC_GET_RNID_PARAMS		0x5a	/* Get RNID parameters */
+#define MBC_DATA_RATE			0x5d	/* Data Rate */
 #define MBC_INITIALIZE_FIRMWARE		0x60	/* Initialize firmware */
 #define MBC_INITIATE_LIP		0x62	/* Initiate Loop */
 						/* Initialization Procedure */
@@ -704,26 +938,50 @@ typedef struct {
 #define MBC_LUN_RESET			0x7E	/* Send LUN reset */
 
 /*
+ * all the Mt. Rainier mailbox command codes that clash with FC/FCoE ones
+ * should be defined with MBC_MR_*
+ */
+#define MBC_MR_DRV_SHUTDOWN		0x6A
+
+/*
  * ISP24xx mailbox commands
  */
+#define MBC_WRITE_SERDES		0x3	/* Write serdes word. */
+#define MBC_READ_SERDES			0x4	/* Read serdes word. */
+#define MBC_LOAD_DUMP_MPI_RAM		0x5	/* Load/Dump MPI RAM. */
 #define MBC_SERDES_PARAMS		0x10	/* Serdes Tx Parameters. */
 #define MBC_GET_IOCB_STATUS		0x12	/* Get IOCB status command. */
 #define MBC_PORT_PARAMS			0x1A	/* Port iDMA Parameters. */
 #define MBC_GET_TIMEOUT_PARAMS		0x22	/* Get FW timeouts. */
 #define MBC_TRACE_CONTROL		0x27	/* Trace control command. */
 #define MBC_GEN_SYSTEM_ERROR		0x2a	/* Generate System Error. */
+#define MBC_WRITE_SFP			0x30	/* Write SFP Data. */
 #define MBC_READ_SFP			0x31	/* Read SFP Data. */
 #define MBC_SET_TIMEOUT_PARAMS		0x32	/* Set FW timeouts. */
+#define MBC_DPORT_DIAGNOSTICS		0x47	/* D-Port Diagnostics */
 #define MBC_MID_INITIALIZE_FIRMWARE	0x48	/* MID Initialize firmware. */
 #define MBC_MID_GET_VP_DATABASE		0x49	/* MID Get VP Database. */
 #define MBC_MID_GET_VP_ENTRY		0x4a	/* MID Get VP Entry. */
 #define MBC_HOST_MEMORY_COPY		0x53	/* Host Memory Copy. */
 #define MBC_SEND_RNFT_ELS		0x5e	/* Send RNFT ELS request */
 #define MBC_GET_LINK_PRIV_STATS		0x6d	/* Get link & private data. */
+#define MBC_LINK_INITIALIZATION		0x72	/* Do link initialization. */
 #define MBC_SET_VENDOR_ID		0x76	/* Set Vendor ID. */
+#define MBC_PORT_RESET			0x120	/* Port Reset */
+#define MBC_SET_PORT_CONFIG		0x122	/* Set port configuration */
+#define MBC_GET_PORT_CONFIG		0x123	/* Get port configuration */
 
-#define TC_ENABLE			4
-#define TC_DISABLE			5
+/*
+ * ISP81xx mailbox commands
+ */
+#define MBC_WRITE_MPI_REGISTER		0x01    /* Write MPI Register. */
+
+/*
+ * ISP8044 mailbox commands
+ */
+#define MBC_SET_GET_ETH_SERDES_REG	0x150
+#define HCS_WRITE_SERDES		0x3
+#define HCS_READ_SERDES			0x4
 
 /* Firmware return data sizes */
 #define FCAL_MAP_SIZE	128
@@ -762,6 +1020,13 @@ typedef struct {
 #define	MBX_1		BIT_1
 #define	MBX_0		BIT_0
 
+#define RNID_TYPE_ELS_CMD	0x5
+#define RNID_TYPE_SET_VERSION	0x9
+#define RNID_TYPE_ASIC_TEMP	0xC
+
+#define ELS_CMD_MAP_SIZE	32
+#define ELS_COMMAND_RDP		0x18
+
 /*
  * Firmware state codes from get firmware state mailbox command
  */
@@ -780,6 +1045,12 @@ typedef struct {
 #define FSTATE_P2P_RCV_UNIDEN_LIP  3
 #define FSTATE_FATAL_ERROR         4
 #define FSTATE_LOOP_BACK_CONN      5
+
+#define QLA27XX_IMG_STATUS_VER_MAJOR   0x01
+#define QLA27XX_IMG_STATUS_VER_MINOR    0x00
+#define QLA27XX_IMG_STATUS_SIGN   0xFACEFADE
+#define QLA27XX_PRIMARY_IMAGE  1
+#define QLA27XX_SECONDARY_IMAGE    2
 
 /*
  * Port Database structure definition
@@ -848,6 +1119,10 @@ typedef struct {
 #define PD_STATE_PORT_LOGOUT			10
 #define PD_STATE_WAIT_PORT_LOGOUT_ACK		11
 
+
+#define QLA_ZIO_MODE_6		(BIT_2 | BIT_1)
+#define QLA_ZIO_DISABLED	0
+#define QLA_ZIO_DEFAULT_TIMER	2
 
 /*
  * ISP Initialization Control Block.
@@ -957,14 +1232,50 @@ typedef struct {
 #define GLSO_SEND_RPS	BIT_0
 #define GLSO_USE_DID	BIT_3
 
-typedef struct {
-	uint32_t	link_fail_cnt;
-	uint32_t	loss_sync_cnt;
-	uint32_t	loss_sig_cnt;
-	uint32_t	prim_seq_err_cnt;
-	uint32_t	inval_xmit_word_cnt;
-	uint32_t	inval_crc_cnt;
-} link_stat_t;
+struct link_statistics {
+	uint32_t link_fail_cnt;
+	uint32_t loss_sync_cnt;
+	uint32_t loss_sig_cnt;
+	uint32_t prim_seq_err_cnt;
+	uint32_t inval_xmit_word_cnt;
+	uint32_t inval_crc_cnt;
+	uint32_t lip_cnt;
+	uint32_t link_up_cnt;
+	uint32_t link_down_loop_init_tmo;
+	uint32_t link_down_los;
+	uint32_t link_down_loss_rcv_clk;
+	uint32_t reserved0[5];
+	uint32_t port_cfg_chg;
+	uint32_t reserved1[11];
+	uint32_t rsp_q_full;
+	uint32_t atio_q_full;
+	uint32_t drop_ae;
+	uint32_t els_proto_err;
+	uint32_t reserved2;
+	uint32_t tx_frames;
+	uint32_t rx_frames;
+	uint32_t discarded_frames;
+	uint32_t dropped_frames;
+	uint32_t reserved3;
+	uint32_t nos_rcvd;
+	uint32_t reserved4[4];
+	uint32_t tx_prjt;
+	uint32_t rcv_exfail;
+	uint32_t rcv_abts;
+	uint32_t seq_frm_miss;
+	uint32_t corr_err;
+	uint32_t mb_rqst;
+	uint32_t nport_full;
+	uint32_t eofa;
+	uint32_t reserved5;
+	uint32_t fpm_recv_word_cnt_lo;
+	uint32_t fpm_recv_word_cnt_hi;
+	uint32_t fpm_disc_word_cnt_lo;
+	uint32_t fpm_disc_word_cnt_hi;
+	uint32_t fpm_xmit_word_cnt_lo;
+	uint32_t fpm_xmit_word_cnt_hi;
+	uint32_t reserved6[70];
+};
 
 /*
  * NVRAM Command values.
@@ -1223,10 +1534,26 @@ typedef struct {
  * ISP queue - response queue entry definition.
  */
 typedef struct {
-	uint8_t		data[60];
+	uint8_t		entry_type;		/* Entry type. */
+	uint8_t		entry_count;		/* Entry count. */
+	uint8_t		sys_define;		/* System defined. */
+	uint8_t		entry_status;		/* Entry Status. */
+	uint32_t	handle;			/* System defined handle */
+	uint8_t		data[52];
 	uint32_t	signature;
 #define RESPONSE_PROCESSED	0xDEADDEAD	/* Signature */
 } response_t;
+
+/*
+ * ISP queue - ATIO queue entry definition.
+ */
+struct atio {
+	uint8_t		entry_type;		/* Entry type. */
+	uint8_t		entry_count;		/* Entry count. */
+	uint8_t		data[58];
+	uint32_t	signature;
+#define ATIO_PROCESSED 0xDEADDEAD		/* Signature */
+};
 
 typedef union {
 	uint16_t extended;
@@ -1346,6 +1673,67 @@ typedef struct {
 	uint32_t dseg_4_length;		/* Data segment 4 length. */
 } cont_a64_entry_t;
 
+#define PO_MODE_DIF_INSERT	0
+#define PO_MODE_DIF_REMOVE	1
+#define PO_MODE_DIF_PASS	2
+#define PO_MODE_DIF_REPLACE	3
+#define PO_MODE_DIF_TCP_CKSUM	6
+#define PO_ENABLE_DIF_BUNDLING	BIT_8
+#define PO_ENABLE_INCR_GUARD_SEED	BIT_3
+#define PO_DISABLE_INCR_REF_TAG	BIT_5
+#define PO_DISABLE_GUARD_CHECK	BIT_4
+/*
+ * ISP queue - 64-Bit addressing, continuation crc entry structure definition.
+ */
+struct crc_context {
+	uint32_t handle;		/* System handle. */
+	uint32_t ref_tag;
+	uint16_t app_tag;
+	uint8_t ref_tag_mask[4];	/* Validation/Replacement Mask*/
+	uint8_t app_tag_mask[2];	/* Validation/Replacement Mask*/
+	uint16_t guard_seed;		/* Initial Guard Seed */
+	uint16_t prot_opts;		/* Requested Data Protection Mode */
+	uint16_t blk_size;		/* Data size in bytes */
+	uint16_t runt_blk_guard;	/* Guard value for runt block (tape
+					 * only) */
+	uint32_t byte_count;		/* Total byte count/ total data
+					 * transfer count */
+	union {
+		struct {
+			uint32_t	reserved_1;
+			uint16_t	reserved_2;
+			uint16_t	reserved_3;
+			uint32_t	reserved_4;
+			uint32_t	data_address[2];
+			uint32_t	data_length;
+			uint32_t	reserved_5[2];
+			uint32_t	reserved_6;
+		} nobundling;
+		struct {
+			uint32_t	dif_byte_count;	/* Total DIF byte
+							 * count */
+			uint16_t	reserved_1;
+			uint16_t	dseg_count;	/* Data segment count */
+			uint32_t	reserved_2;
+			uint32_t	data_address[2];
+			uint32_t	data_length;
+			uint32_t	dif_address[2];
+			uint32_t	dif_length;	/* Data segment 0
+							 * length */
+		} bundling;
+	} u;
+
+	struct fcp_cmnd	fcp_cmnd;
+	dma_addr_t	crc_ctx_dma;
+	/* List of DMA context transfers */
+	struct list_head dsd_list;
+
+	/* This structure should not exceed 512 bytes */
+};
+
+#define CRC_CONTEXT_LEN_FW	(offsetof(struct crc_context, fcp_cmnd.lun))
+#define CRC_CONTEXT_FCPCMND_OFF	(offsetof(struct crc_context, fcp_cmnd.lun))
+
 /*
  * ISP queue - status entry structure definition.
  */
@@ -1406,6 +1794,7 @@ typedef struct {
 #define CS_ABORTED		0x5	/* System aborted command. */
 #define CS_TIMEOUT		0x6	/* Timeout error. */
 #define CS_DATA_OVERRUN		0x7	/* Data overrun. */
+#define CS_DIF_ERROR		0xC	/* DIF error detected  */
 
 #define CS_DATA_UNDERRUN	0x15	/* Data Underrun. */
 #define CS_QUEUE_FULL		0x1C	/* Queue Full. */
@@ -1415,11 +1804,20 @@ typedef struct {
 #define CS_PORT_CONFIG_CHG	0x2A	/* Port Configuration Changed */
 #define CS_PORT_BUSY		0x2B	/* Port Busy */
 #define CS_COMPLETE_CHKCOND	0x30	/* Error? */
+#define CS_IOCB_ERROR		0x31	/* Generic error for IOCB request
+					   failure */
 #define CS_BAD_PAYLOAD		0x80	/* Driver defined */
 #define CS_UNKNOWN		0x81	/* Driver defined */
 #define CS_RETRY		0x82	/* Driver defined */
 #define CS_LOOP_DOWN_ABORT	0x83	/* Driver defined */
 
+#define CS_BIDIR_RD_OVERRUN			0x700
+#define CS_BIDIR_RD_WR_OVERRUN			0x707
+#define CS_BIDIR_RD_OVERRUN_WR_UNDERRUN		0x715
+#define CS_BIDIR_RD_UNDERRUN			0x1500
+#define CS_BIDIR_RD_UNDERRUN_WR_OVERRUN		0x1507
+#define CS_BIDIR_RD_WR_UNDERRUN			0x1515
+#define CS_BIDIR_DMA				0x200
 /*
  * Status entry status flags
  */
@@ -1560,12 +1958,12 @@ struct mbx_entry {
 	uint8_t port_name[WWN_SIZE];
 };
 
+
 /*
  * ISP request and response queue entry sizes
  */
 #define RESPONSE_ENTRY_SIZE	(sizeof(response_t))
 #define REQUEST_ENTRY_SIZE	(sizeof(request_t))
-
 
 /*
  * 24 bit port ID type definition.
@@ -1579,9 +1977,17 @@ typedef union {
 	} r;
 
 	struct {
+#ifdef __BIG_ENDIAN
+		uint8_t domain;
+		uint8_t area;
+		uint8_t al_pa;
+#elif defined(__LITTLE_ENDIAN)
 		uint8_t al_pa;
 		uint8_t area;
 		uint8_t domain;
+#else
+#error "__BIG_ENDIAN or __LITTLE_ENDIAN must be defined!"
+#endif
 		uint8_t rsvd_1;
 	} b;
 } port_id_t;
@@ -1595,137 +2001,14 @@ typedef struct {
 	uint8_t node_name[WWN_SIZE];
 	uint8_t port_name[WWN_SIZE];
 	uint8_t fabric_port_name[WWN_SIZE];
-	uint16_t fp_speeds;
 	uint16_t fp_speed;
+	uint8_t fc4_type;
 } sw_info_t;
 
-/*
- * Inquiry command structure.
- */
-#define INQ_DATA_SIZE	36
-
-/*
- * Inquiry mailbox IOCB packet definition.
- */
-typedef struct {
-	union {
-		cmd_a64_entry_t cmd;
-		sts_entry_t rsp;
-		struct cmd_type_7 cmd24;
-		struct sts_entry_24xx rsp24;
-	} p;
-	uint8_t inq[INQ_DATA_SIZE];
-} inq_cmd_rsp_t;
-
-/*
- * Report LUN command structure.
- */
-#define CHAR_TO_SHORT(a, b)	(uint16_t)((uint8_t)b << 8 | (uint8_t)a)
-
-typedef struct {
-	uint32_t len;
-	uint32_t rsrv;
-} rpt_hdr_t;
-
-typedef struct {
-	struct {
-		uint8_t b : 6;
-		uint8_t address_method : 2;
-	} msb;
-	uint8_t lsb;
-	uint8_t unused[6];
-} rpt_lun_t;
-
-typedef struct {
-	rpt_hdr_t hdr;
-	rpt_lun_t lst[MAX_LUNS];
-} rpt_lun_lst_t;
-
-/*
- * Report Lun mailbox IOCB packet definition.
- */
-typedef struct {
-	union {
-		cmd_a64_entry_t cmd;
-		sts_entry_t rsp;
-		struct cmd_type_7 cmd24;
-		struct sts_entry_24xx rsp24;
-	} p;
-	rpt_lun_lst_t list;
-} rpt_lun_cmd_rsp_t;
-
-
-/*
- * SCSI Target Queue structure
- */
-typedef struct os_tgt {
-	struct os_lun *olun[MAX_LUNS]; /* LUN context pointer. */
-	struct fc_port *fcport;
-	unsigned long flags;
-	uint8_t port_down_retry_count;
-    	uint32_t down_timer;
-	struct scsi_qla_host *ha;
-
-	/* Persistent binding information */
-	port_id_t d_id;
-	uint8_t node_name[WWN_SIZE];
-	uint8_t port_name[WWN_SIZE];
-	uint8_t id;
-} os_tgt_t;
-
-/*
- * SCSI Target Queue flags
- */
-#define TQF_ONLINE		0		/* Device online to OS. */
-#define TQF_SUSPENDED		1
-#define TQF_RETRY_CMDS		2
-#define TQF_USED_ID		3
-
-/*
- * SCSI LUN Queue structure
- */
-typedef struct os_lun {
-	struct fc_lun *fclun;		/* FC LUN context pointer. */
-    	spinlock_t q_lock;		/* Lun Lock */
-
-	unsigned long q_flag;
-#define LUN_MPIO_RESET_CNTS	1	/* Lun */
-#define LUN_MPIO_BUSY		2	/* Lun is changing paths  */
-#define LUN_EXEC_DELAYED	7	/* Lun execution is delayed */
-
-	u_long q_timeout;		/* total command timeouts */
-	atomic_t q_timer;		/* suspend timer */
-	uint32_t q_count;		/* current count */
-	uint32_t q_max;			/* maxmum count lun can be suspended */
-	uint8_t q_state;		/* lun State */
-#define LUN_STATE_READY		1	/* lun is ready for i/o */
-#define LUN_STATE_RUN		2	/* lun has a timer running */
-#define LUN_STATE_WAIT		3	/* lun is suspended */
-#define LUN_STATE_TIMEOUT	4	/* lun has timed out */
-
-	u_long io_cnt;			/* total xfer count since boot */
-	u_long out_cnt;			/* total outstanding IO count */
-	u_long w_cnt;			/* total writes */
-	u_long r_cnt;			/* total reads */
-	u_long avg_time;		/*  */
-#ifdef CONFIG_SCSI_QLA2XXX_FAILOVER
-	void *fo_ptr;
-#endif
-} os_lun_t;
-
-
-/* LUN BitMask structure definition, array of 32bit words,
- * 1 bit per lun.  When bit == 1, the lun is masked.
- * Most significant bit of mask[0] is lun 0, bit 24 is lun 7.
- */
-typedef struct lun_bit_mask {
-	/* Must allocate at least enough bits to accomodate all LUNs */
-#if ((MAX_FIBRE_LUNS & 0x7) == 0)
-	uint8_t mask[MAX_FIBRE_LUNS >> 3];
-#else
-	uint8_t mask[(MAX_FIBRE_LUNS + 8) >> 3];
-#endif
-} lun_bit_mask_t;
+/* FCP-4 types */
+#define FC4_TYPE_FCP_SCSI	0x08
+#define FC4_TYPE_OTHER		0x0
+#define FC4_TYPE_UNKNOWN	0xff
 
 /*
  * Fibre channel port type.
@@ -1744,16 +2027,18 @@ typedef struct lun_bit_mask {
  */
 typedef struct fc_port {
 	struct list_head list;
-	struct list_head fcluns;
-
-	struct scsi_qla_host *ha;
-	struct scsi_qla_host *vis_ha;	/* only used when suspending lun */
+	struct scsi_qla_host *vha;
 
 	uint8_t node_name[WWN_SIZE];
 	uint8_t port_name[WWN_SIZE];
 	port_id_t d_id;
 	uint16_t loop_id;
 	uint16_t old_loop_id;
+
+	uint16_t tgt_id;
+	uint16_t old_tgt_id;
+
+	uint8_t fcp_prio;
 
 	uint8_t fabric_port_name[WWN_SIZE];
 	uint16_t fp_speed;
@@ -1763,35 +2048,23 @@ typedef struct fc_port {
 	atomic_t state;
 	uint32_t flags;
 
-	os_tgt_t *tgt_queue;
-	uint16_t os_target_id;
-
-	uint16_t iodesc_idx_sent;
-
-	int port_login_retry_count;
 	int login_retry;
-	atomic_t port_down_timer;
 
-	uint8_t device_type;
-	uint8_t unused;
+	struct fc_rport *rport, *drport;
+	u32 supported_classes;
 
-	uint8_t mp_byte;		/* multi-path byte (not used) */
-    	uint8_t cur_path;		/* current path id */
-
-#ifdef CONFIG_SCSI_QLA2XXX_FAILOVER
-	int16_t cfg_id;			/* index into cfg device table */
-	uint16_t notify_type;
-	int (*fo_combine)(void *, uint16_t, struct fc_port *, uint16_t);
-	int (*fo_detect)(void);
-	int (*fo_notify)(void);
-	int (*fo_select)(void);
-	int (*fo_target_port)(struct fc_port *, struct fc_lun *, int);
-#endif
-	lun_bit_mask_t lun_mask;
+	uint8_t fc4_type;
+	uint8_t scan_state;
 
 	unsigned long last_queue_full;
 	unsigned long last_ramp_up;
+
+	uint16_t port_id;
+
+	unsigned long retry_delay_timestamp;
 } fc_port_t;
+
+#include "qla_mr.h"
 
 /*
  * Fibre channel port/lun states.
@@ -1800,80 +2073,26 @@ typedef struct fc_port {
 #define FCS_DEVICE_DEAD		2
 #define FCS_DEVICE_LOST		3
 #define FCS_ONLINE		4
-#define FCS_NOT_SUPPORTED	5
-#define FCS_FAILOVER		6
-#define FCS_FAILOVER_FAILED	7
+
+static const char * const port_state_str[] = {
+	"Unknown",
+	"UNCONFIGURED",
+	"DEAD",
+	"LOST",
+	"ONLINE"
+};
 
 /*
  * FC port flags.
  */
-#define FC_FABRIC_DEVICE	BIT_0
-#define FC_LOGIN_NEEDED	BIT_1
-#define FC_FO_MASKED		BIT_2
-#define FC_FAILOVER_NEEDED	BIT_3
-#define FC_RESET_NEEDED	BIT_4
-#define FC_PERSISTENT_BOUND	BIT_5
-#define FC_TAPE_PRESENT	BIT_6
-#define FC_FARP_DONE		BIT_7
-#define FC_FARP_FAILED		BIT_8
-#define FC_FARP_REPLY_NEEDED	BIT_9
-#define FC_AUTH_REQ		BIT_10
-#define FC_SEND_AUTH_REQ	BIT_11
-#define FC_RECEIVE_AUTH_REQ	BIT_12
-#define FC_AUTH_SUCCESS	BIT_13
-#define FC_RLC_SUPPORT		BIT_14
-#define FC_CONFIG		BIT_15	/* Needed? */
-#define FC_RESCAN_NEEDED	BIT_16
-#define FC_XP_DEVICE		BIT_17
-#define FC_MSA_DEVICE		BIT_18
-#define FC_EVA_DEVICE		BIT_19
-#define FC_MSA_PORT_ACTIVE	BIT_20
-#define FC_FAILBACK_DISABLE	BIT_21
-#define FC_FAILOVER_DISABLE	BIT_22
-#define FC_DSXXX_DEVICE	BIT_23
-#define FC_AA_EVA_DEVICE	BIT_24
-#define FC_AA_MSA_DEVICE	BIT_25
-#define FC_DFXXX_DEVICE	BIT_26
-#define FC_NVSXXX_DEVICE	BIT_27
-#define FC_SYMXXX_DEVICE	BIT_28
+#define FCF_FABRIC_DEVICE	BIT_0
+#define FCF_LOGIN_NEEDED	BIT_1
+#define FCF_FCP2_DEVICE		BIT_2
+#define FCF_ASYNC_SENT		BIT_3
+#define FCF_CONF_COMP_SUPPORTED BIT_4
 
 /* No loop ID flag. */
 #define FC_NO_LOOP_ID		0x1000
-
-/*
- * Fibre channel LUN structure.
- */
-typedef struct fc_lun {
-        struct list_head list;
-
-	fc_port_t *fcport;
-	fc_port_t *o_fcport;
-	uint16_t lun;
-	atomic_t state;
-	uint8_t device_type;
-
-	uint8_t max_path_retries;
-	uint32_t flags;
-#ifdef CONFIG_SCSI_QLA2XXX_FAILOVER
-	u_long      		s_time;	/* service time */
-	u_long			kbytes;
-	u_long			io_cnt; /* total xfer count since boot */
-	void *mplun;
-	void *mpbuf;		/* Pointer to buffer use by MPIO driver. */
-	int mplen;
-	void *lu_path;
-    	uint8_t path_id;	/* Path id */
-	uint8_t asymm_support;	/*
-				 * tpgs field of the inquiry data indicating
-				 * support for REPORT/SET Tgt port group.
-				 */
-#define TGT_PORT_GRP_UNSUPPORTED	0
-#define SET_TGT_PORT_GRP_UNSUPPORTED	1
-#endif
-} fc_lun_t;
-
-#define	FLF_VISIBLE_LUN		BIT_0
-#define	FLF_ACTIVE_LUN		BIT_1
 
 /*
  * FC-CT interface
@@ -1883,9 +2102,21 @@ typedef struct fc_lun {
 
 #define CT_REJECT_RESPONSE	0x8001
 #define CT_ACCEPT_RESPONSE	0x8002
-#define CT_REASON_INVALID_COMMAND_CODE	0x01
-#define CT_REASON_CANNOT_PERFORM	0x09
-#define CT_EXPL_ALREADY_REGISTERED	0x10
+#define CT_REASON_INVALID_COMMAND_CODE		0x01
+#define CT_REASON_CANNOT_PERFORM		0x09
+#define CT_REASON_COMMAND_UNSUPPORTED		0x0b
+#define CT_EXPL_ALREADY_REGISTERED		0x10
+#define CT_EXPL_HBA_ATTR_NOT_REGISTERED		0x11
+#define CT_EXPL_MULTIPLE_HBA_ATTR		0x12
+#define CT_EXPL_INVALID_HBA_BLOCK_LENGTH	0x13
+#define CT_EXPL_MISSING_REQ_HBA_ATTR		0x14
+#define CT_EXPL_PORT_NOT_REGISTERED_		0x15
+#define CT_EXPL_MISSING_HBA_ID_PORT_LIST	0x16
+#define CT_EXPL_HBA_NOT_REGISTERED		0x17
+#define CT_EXPL_PORT_ATTR_NOT_REGISTERED	0x20
+#define CT_EXPL_PORT_NOT_REGISTERED		0x21
+#define CT_EXPL_MULTIPLE_PORT_ATTR		0x22
+#define CT_EXPL_INVALID_PORT_BLOCK_LENGTH	0x23
 
 #define NS_N_PORT_TYPE	0x01
 #define NS_NL_PORT_TYPE	0x02
@@ -1897,7 +2128,6 @@ typedef struct fc_lun {
 
 #define	GID_PT_CMD	0x1A1
 #define	GID_PT_REQ_SIZE	(16 + 4)
-#define	GID_PT_RSP_SIZE	(16 + (MAX_FIBRE_DEVICES * 4))
 
 #define	GPN_ID_CMD	0x112
 #define	GPN_ID_REQ_SIZE	(16 + 4)
@@ -1935,56 +2165,117 @@ typedef struct fc_lun {
 #define	GPSC_REQ_SIZE	(16 + 8)
 #define	GPSC_RSP_SIZE	(16 + 2 + 2)
 
+#define GFF_ID_CMD	0x011F
+#define GFF_ID_REQ_SIZE	(16 + 4)
+#define GFF_ID_RSP_SIZE (16 + 128)
+
+#define QLA_QOS_NO_SUPP		0
+#define QLA_QOS_SUPP		1
 
 /*
- * HBA attribute types.
+ * FDMI HBA attribute types.
  */
-#define FDMI_HBA_ATTR_COUNT			10
-#define FDMI_HBA_NODE_NAME			1
-#define FDMI_HBA_MANUFACTURER			2
-#define FDMI_HBA_SERIAL_NUMBER			3
-#define FDMI_HBA_MODEL				4
-#define FDMI_HBA_MODEL_DESCRIPTION		5
-#define FDMI_HBA_HARDWARE_VERSION		6
-#define FDMI_HBA_DRIVER_VERSION			7
-#define FDMI_HBA_OPTION_ROM_VERSION		8
-#define FDMI_HBA_FIRMWARE_VERSION		9
+#define FDMI1_HBA_ATTR_COUNT			9
+#define FDMI2_HBA_ATTR_COUNT			17
+
+#define FDMI_HBA_NODE_NAME			0x1
+#define FDMI_HBA_MANUFACTURER			0x2
+#define FDMI_HBA_SERIAL_NUMBER			0x3
+#define FDMI_HBA_MODEL				0x4
+#define FDMI_HBA_MODEL_DESCRIPTION		0x5
+#define FDMI_HBA_HARDWARE_VERSION		0x6
+#define FDMI_HBA_DRIVER_VERSION			0x7
+#define FDMI_HBA_OPTION_ROM_VERSION		0x8
+#define FDMI_HBA_FIRMWARE_VERSION		0x9
 #define FDMI_HBA_OS_NAME_AND_VERSION		0xa
 #define FDMI_HBA_MAXIMUM_CT_PAYLOAD_LENGTH	0xb
+
+#define FDMI_HBA_NODE_SYMBOLIC_NAME		0xc
+#define FDMI_HBA_VENDOR_SPECIFIC_INFO		0xd
+#define FDMI_HBA_NUM_PORTS			0xe
+#define FDMI_HBA_FABRIC_NAME			0xf
+#define FDMI_HBA_BOOT_BIOS_NAME			0x10
+#define FDMI_HBA_VENDOR_IDENTIFIER		0xe0
 
 struct ct_fdmi_hba_attr {
 	uint16_t type;
 	uint16_t len;
 	union {
 		uint8_t node_name[WWN_SIZE];
-		uint8_t manufacturer[32];
-		uint8_t serial_num[8];
-		uint8_t model[16];
+		uint8_t manufacturer[64];
+		uint8_t serial_num[32];
+		uint8_t model[16+1];
 		uint8_t model_desc[80];
-		uint8_t hw_version[16];
+		uint8_t hw_version[32];
 		uint8_t driver_version[32];
 		uint8_t orom_version[16];
-		uint8_t fw_version[16];
+		uint8_t fw_version[32];
 		uint8_t os_version[128];
-		uint8_t max_ct_len[4];
+		uint32_t max_ct_len;
+
+		uint8_t sym_name[256];
+		uint32_t vendor_specific_info;
+		uint32_t num_ports;
+		uint8_t fabric_name[WWN_SIZE];
+		uint8_t bios_name[32];
+		uint8_t vendor_indentifer[8];
 	} a;
 };
 
-struct ct_fdmi_hba_attributes {
+struct ct_fdmi1_hba_attributes {
 	uint32_t count;
-	struct ct_fdmi_hba_attr entry[FDMI_HBA_ATTR_COUNT];
+	struct ct_fdmi_hba_attr entry[FDMI1_HBA_ATTR_COUNT];
+};
+
+struct ct_fdmi2_hba_attributes {
+	uint32_t count;
+	struct ct_fdmi_hba_attr entry[FDMI2_HBA_ATTR_COUNT];
 };
 
 /*
- * Port attribute types.
+ * FDMI Port attribute types.
  */
-#define FDMI_PORT_ATTR_COUNT		6
-#define FDMI_PORT_FC4_TYPES		1
-#define FDMI_PORT_SUPPORT_SPEED		2
-#define FDMI_PORT_CURRENT_SPEED		3
-#define FDMI_PORT_MAX_FRAME_SIZE	4
-#define FDMI_PORT_OS_DEVICE_NAME	5
-#define FDMI_PORT_HOST_NAME		6
+#define FDMI1_PORT_ATTR_COUNT		6
+#define FDMI2_PORT_ATTR_COUNT		16
+#define FDMI2_SMARTSAN_PORT_ATTR_COUNT	23
+
+#define FDMI_PORT_FC4_TYPES		0x1
+#define FDMI_PORT_SUPPORT_SPEED		0x2
+#define FDMI_PORT_CURRENT_SPEED		0x3
+#define FDMI_PORT_MAX_FRAME_SIZE	0x4
+#define FDMI_PORT_OS_DEVICE_NAME	0x5
+#define FDMI_PORT_HOST_NAME		0x6
+
+#define FDMI_PORT_NODE_NAME		0x7
+#define FDMI_PORT_NAME			0x8
+#define FDMI_PORT_SYM_NAME		0x9
+#define FDMI_PORT_TYPE			0xa
+#define FDMI_PORT_SUPP_COS		0xb
+#define FDMI_PORT_FABRIC_NAME		0xc
+#define FDMI_PORT_FC4_TYPE		0xd
+#define FDMI_PORT_STATE			0x101
+#define FDMI_PORT_COUNT			0x102
+#define FDMI_PORT_IDENTIFIER		0x103
+
+#define FDMI_SMARTSAN_SERVICE		0xF100
+#define FDMI_SMARTSAN_GUID		0xF101
+#define FDMI_SMARTSAN_VERSION		0xF102
+#define FDMI_SMARTSAN_PROD_NAME		0xF103
+#define FDMI_SMARTSAN_PORT_INFO		0xF104
+#define FDMI_SMARTSAN_QOS_SUPPORT	0xF105
+#define FDMI_SMARTSAN_SECURITY_SUPPORT	0xF106
+
+#define FDMI_PORT_SPEED_1GB		0x1
+#define FDMI_PORT_SPEED_2GB		0x2
+#define FDMI_PORT_SPEED_10GB		0x4
+#define FDMI_PORT_SPEED_4GB		0x8
+#define FDMI_PORT_SPEED_8GB		0x10
+#define FDMI_PORT_SPEED_16GB		0x20
+#define FDMI_PORT_SPEED_32GB		0x40
+#define FDMI_PORT_SPEED_UNKNOWN		0x8000
+
+#define FC_CLASS_2	0x04
+#define FC_CLASS_3	0x08
 
 struct ct_fdmi_port_attr {
 	uint16_t type;
@@ -1995,17 +2286,49 @@ struct ct_fdmi_port_attr {
 		uint32_t cur_speed;
 		uint32_t max_frame_size;
 		uint8_t os_dev_name[32];
-		uint8_t host_name[32];
+		uint8_t host_name[256];
+
+		uint8_t node_name[WWN_SIZE];
+		uint8_t port_name[WWN_SIZE];
+		uint8_t port_sym_name[128];
+		uint32_t port_type;
+		uint32_t port_supported_cos;
+		uint8_t fabric_name[WWN_SIZE];
+		uint8_t port_fc4_type[32];
+		uint32_t port_state;
+		uint32_t num_ports;
+		uint32_t port_id;
+
+		uint8_t smartsan_service[24];
+		uint8_t smartsan_guid[16];
+		uint8_t smartsan_version[24];
+		uint8_t smartsan_prod_name[16];
+		uint32_t smartsan_port_info;
+		uint32_t smartsan_qos_support;
+		uint32_t smartsan_security_support;
 	} a;
 };
 
-/*
- * Port Attribute Block.
- */
-struct ct_fdmi_port_attributes {
+struct ct_fdmi1_port_attributes {
 	uint32_t count;
-	struct ct_fdmi_port_attr entry[FDMI_PORT_ATTR_COUNT];
+	struct ct_fdmi_port_attr entry[FDMI1_PORT_ATTR_COUNT];
 };
+
+struct ct_fdmi2_port_attributes {
+	uint32_t count;
+	struct ct_fdmi_port_attr entry[FDMI2_PORT_ATTR_COUNT];
+};
+
+#define FDMI_ATTR_TYPELEN(obj) \
+    (sizeof((obj)->type) + sizeof((obj)->len))
+
+#define FDMI_ATTR_ALIGNMENT(len) \
+    (4 - ((len) & 3))
+
+/* FDMI register call options */
+#define CALLOPT_FDMI1		0
+#define CALLOPT_FDMI2		1
+#define CALLOPT_FDMI2_SMARTSAN	2
 
 /* FDMI definitions. */
 #define GRHL_CMD	0x100
@@ -2017,10 +2340,13 @@ struct ct_fdmi_port_attributes {
 #define RHBA_RSP_SIZE	16
 
 #define RHAT_CMD	0x201
+
 #define RPRT_CMD	0x210
+#define RPRT_RSP_SIZE	24
 
 #define RPA_CMD		0x211
 #define RPA_RSP_SIZE	16
+#define SMARTSAN_RPA_RSP_SIZE	24
 
 #define DHBA_CMD	0x300
 #define DHBA_REQ_SIZE	(16 + 8)
@@ -2096,18 +2422,24 @@ struct ct_sns_req {
 			uint8_t hba_identifier[8];
 			uint32_t entry_count;
 			uint8_t port_name[8];
-			struct ct_fdmi_hba_attributes attrs;
+			struct ct_fdmi2_hba_attributes attrs;
 		} rhba;
 
 		struct {
 			uint8_t hba_identifier[8];
-			struct ct_fdmi_hba_attributes attrs;
+			struct ct_fdmi1_hba_attributes attrs;
 		} rhat;
 
 		struct {
 			uint8_t port_name[8];
-			struct ct_fdmi_port_attributes attrs;
+			struct ct_fdmi2_port_attributes attrs;
 		} rpa;
+
+		struct {
+			uint8_t hba_identifier[8];
+			uint8_t port_name[8];
+			struct ct_fdmi2_port_attributes attrs;
+		} rprt;
 
 		struct {
 			uint8_t port_name[8];
@@ -2128,6 +2460,11 @@ struct ct_sns_req {
 		struct {
 			uint8_t port_name[8];
 		} gpsc;
+
+		struct {
+			uint8_t reserved;
+			uint8_t port_name[3];
+		} gff_id;
 	} req;
 };
 
@@ -2171,7 +2508,9 @@ struct ct_sns_rsp {
 		} ga_nxt;
 
 		struct {
-			struct ct_sns_gid_pt_data entries[MAX_FIBRE_DEVICES];
+			/* Assume the largest number of targets for the union */
+			struct ct_sns_gid_pt_data
+			    entries[MAX_FIBRE_DEVICES_MAX];
 		} gid_pt;
 
 		struct {
@@ -2189,7 +2528,7 @@ struct ct_sns_rsp {
 		struct {
 			uint32_t entry_count;
 			uint8_t port_name[8];
-			struct ct_fdmi_hba_attributes attrs;
+			struct ct_fdmi1_hba_attributes attrs;
 		} ghat;
 
 		struct {
@@ -2200,6 +2539,11 @@ struct ct_sns_rsp {
 			uint16_t speeds;
 			uint16_t speed;
 		} gpsc;
+
+#define GFF_FCP_SCSI_OFFSET	7
+		struct {
+			uint8_t fc4_features[128];
+		} gff_id;
 	} rsp;
 };
 
@@ -2211,7 +2555,7 @@ struct ct_sns_pkt {
 };
 
 /*
- * SNS command structures -- for 2200 compatability.
+ * SNS command structures -- for 2200 compatibility.
  */
 #define	RFT_ID_SNS_SCMD_LEN	22
 #define	RFT_ID_SNS_CMD_SIZE	60
@@ -2227,7 +2571,11 @@ struct ct_sns_pkt {
 
 #define	GID_PT_SNS_SCMD_LEN	6
 #define	GID_PT_SNS_CMD_SIZE	28
-#define	GID_PT_SNS_DATA_SIZE	(MAX_FIBRE_DEVICES * 4 + 16)
+/*
+ * Assume MAX_FIBRE_DEVICES_2100 as these defines are only used with older
+ * adapters.
+ */
+#define	GID_PT_SNS_DATA_SIZE	(MAX_FIBRE_DEVICES_2100 * 4 + 16)
 
 #define	GPN_ID_SNS_SCMD_LEN	6
 #define	GPN_ID_SNS_CMD_SIZE	28
@@ -2260,51 +2608,10 @@ struct sns_cmd_pkt {
 	} p;
 };
 
-/* IO descriptors */
-#define MAX_IO_DESCRIPTORS	32
-
-#define ABORT_IOCB_CB		0
-#define ADISC_PORT_IOCB_CB	1
-#define LOGOUT_PORT_IOCB_CB	2
-#define LOGIN_PORT_IOCB_CB	3
-#define LAST_IOCB_CB		4
-
-#define IODESC_INVALID_INDEX	0xFFFF
-#define IODESC_ADISC_NEEDED	0xFFFE
-#define IODESC_LOGIN_NEEDED	0xFFFD
-
-struct io_descriptor {
-	uint16_t used:1;
-	uint16_t idx:11;
-	uint16_t cb_idx:4;
-
-	struct timer_list timer;
-
-	struct scsi_qla_host *ha;
-
-	port_id_t d_id;
-	fc_port_t *remote_fcport;
-
-	uint32_t signature;
-};
-
-struct qla_fw_info {
-	unsigned short addressing;	/* addressing method used to load fw */
-#define FW_INFO_ADDR_NORMAL	0
-#define FW_INFO_ADDR_EXTENDED	1
-#define FW_INFO_ADDR_NOMORE	0xffff
-	unsigned short *fwcode;		/* pointer to FW array */
-	unsigned short *fwlen;		/* number of words in array */
-	unsigned short *fwstart;	/* start address for F/W */
-	unsigned long *lfwstart;	/* start address (long) for F/W */
-};
-
-struct qla_board_info {
-	char *drv_name;
-
-	char isp_name[8];
-	struct qla_fw_info *fw_info;
-	char *fw_fname;;
+struct fw_blob {
+	char *name;
+	uint32_t segs[4];
+	const struct firmware *fw;
 };
 
 /* Return data from MBC_GET_ID_LIST call. */
@@ -2316,43 +2623,1041 @@ struct gid_list_info {
 	uint16_t loop_id;	/* ISP23XX         -- 6 bytes. */
 	uint16_t reserved_1;	/* ISP24XX         -- 8 bytes. */
 };
-#define GID_LIST_SIZE (sizeof(struct gid_list_info) * MAX_FIBRE_DEVICES)
+
+/* NPIV */
+typedef struct vport_info {
+	uint8_t		port_name[WWN_SIZE];
+	uint8_t		node_name[WWN_SIZE];
+	int		vp_id;
+	uint16_t	loop_id;
+	unsigned long	host_no;
+	uint8_t		port_id[3];
+	int		loop_state;
+} vport_info_t;
+
+typedef struct vport_params {
+	uint8_t 	port_name[WWN_SIZE];
+	uint8_t 	node_name[WWN_SIZE];
+	uint32_t 	options;
+#define	VP_OPTS_RETRY_ENABLE	BIT_0
+#define	VP_OPTS_VP_DISABLE	BIT_1
+} vport_params_t;
+
+/* NPIV - return codes of VP create and modify */
+#define VP_RET_CODE_OK			0
+#define VP_RET_CODE_FATAL		1
+#define VP_RET_CODE_WRONG_ID		2
+#define VP_RET_CODE_WWPN		3
+#define VP_RET_CODE_RESOURCES		4
+#define VP_RET_CODE_NO_MEM		5
+#define VP_RET_CODE_NOT_FOUND		6
+
+struct qla_hw_data;
+struct rsp_que;
+/*
+ * ISP operations
+ */
+struct isp_operations {
+
+	int (*pci_config) (struct scsi_qla_host *);
+	void (*reset_chip) (struct scsi_qla_host *);
+	int (*chip_diag) (struct scsi_qla_host *);
+	void (*config_rings) (struct scsi_qla_host *);
+	void (*reset_adapter) (struct scsi_qla_host *);
+	int (*nvram_config) (struct scsi_qla_host *);
+	void (*update_fw_options) (struct scsi_qla_host *);
+	int (*load_risc) (struct scsi_qla_host *, uint32_t *);
+
+	char * (*pci_info_str) (struct scsi_qla_host *, char *);
+	char * (*fw_version_str) (struct scsi_qla_host *, char *, size_t);
+
+	irq_handler_t intr_handler;
+	void (*enable_intrs) (struct qla_hw_data *);
+	void (*disable_intrs) (struct qla_hw_data *);
+
+	int (*abort_command) (srb_t *);
+	int (*target_reset) (struct fc_port *, unsigned int, int);
+	int (*lun_reset) (struct fc_port *, unsigned int, int);
+	int (*fabric_login) (struct scsi_qla_host *, uint16_t, uint8_t,
+		uint8_t, uint8_t, uint16_t *, uint8_t);
+	int (*fabric_logout) (struct scsi_qla_host *, uint16_t, uint8_t,
+	    uint8_t, uint8_t);
+
+	uint16_t (*calc_req_entries) (uint16_t);
+	void (*build_iocbs) (srb_t *, cmd_entry_t *, uint16_t);
+	void * (*prep_ms_iocb) (struct scsi_qla_host *, uint32_t, uint32_t);
+	void * (*prep_ms_fdmi_iocb) (struct scsi_qla_host *, uint32_t,
+	    uint32_t);
+
+	uint8_t * (*read_nvram) (struct scsi_qla_host *, uint8_t *,
+		uint32_t, uint32_t);
+	int (*write_nvram) (struct scsi_qla_host *, uint8_t *, uint32_t,
+		uint32_t);
+
+	void (*fw_dump) (struct scsi_qla_host *, int);
+
+	int (*beacon_on) (struct scsi_qla_host *);
+	int (*beacon_off) (struct scsi_qla_host *);
+	void (*beacon_blink) (struct scsi_qla_host *);
+
+	uint8_t * (*read_optrom) (struct scsi_qla_host *, uint8_t *,
+		uint32_t, uint32_t);
+	int (*write_optrom) (struct scsi_qla_host *, uint8_t *, uint32_t,
+		uint32_t);
+
+	int (*get_flash_version) (struct scsi_qla_host *, void *);
+	int (*start_scsi) (srb_t *);
+	int (*abort_isp) (struct scsi_qla_host *);
+	int (*iospace_config)(struct qla_hw_data*);
+	int (*initialize_adapter)(struct scsi_qla_host *);
+};
+
+/* MSI-X Support *************************************************************/
+
+#define QLA_MSIX_CHIP_REV_24XX	3
+#define QLA_MSIX_FW_MODE(m)	(((m) & (BIT_7|BIT_8|BIT_9)) >> 7)
+#define QLA_MSIX_FW_MODE_1(m)	(QLA_MSIX_FW_MODE(m) == 1)
+
+#define QLA_MSIX_DEFAULT	0x00
+#define QLA_MSIX_RSP_Q		0x01
+
+#define QLA_MIDX_DEFAULT	0
+#define QLA_MIDX_RSP_Q		1
+#define QLA_PCI_MSIX_CONTROL	0xa2
+#define QLA_83XX_PCI_MSIX_CONTROL	0x92
+
+struct scsi_qla_host;
+
+struct qla_msix_entry {
+	int have_irq;
+	uint32_t vector;
+	uint16_t entry;
+	struct rsp_que *rsp;
+};
+
+#define	WATCH_INTERVAL		1       /* number of seconds */
+
+/* Work events.  */
+enum qla_work_type {
+	QLA_EVT_AEN,
+	QLA_EVT_IDC_ACK,
+	QLA_EVT_ASYNC_LOGIN,
+	QLA_EVT_ASYNC_LOGIN_DONE,
+	QLA_EVT_ASYNC_LOGOUT,
+	QLA_EVT_ASYNC_LOGOUT_DONE,
+	QLA_EVT_ASYNC_ADISC,
+	QLA_EVT_ASYNC_ADISC_DONE,
+	QLA_EVT_UEVENT,
+	QLA_EVT_AENFX,
+};
+
+/* Securit Support Tier */
+#define	QLA_SEC_NOT_SUPP	0
+#define	QLA_SEC_SUPP_TIER_1	1
+#define	QLA_SEC_SUPP_TIER_2	2
+#define	QLA_SEC_SUPP_TIER_3	3
+
+struct qla_work_evt {
+	struct list_head	list;
+	enum qla_work_type	type;
+	u32			flags;
+#define QLA_EVT_FLAG_FREE	0x1
+
+	union {
+		struct {
+			enum fc_host_event_code code;
+			u32 data;
+		} aen;
+		struct {
+#define QLA_IDC_ACK_REGS	7
+			uint16_t mb[QLA_IDC_ACK_REGS];
+		} idc_ack;
+		struct {
+			struct fc_port *fcport;
+#define QLA_LOGIO_LOGIN_RETRIED	BIT_0
+			u16 data[2];
+		} logio;
+		struct {
+			u32 code;
+#define QLA_UEVENT_CODE_FW_DUMP	0
+		} uevent;
+		struct {
+			uint32_t        evtcode;
+			uint32_t        mbx[8];
+			uint32_t        count;
+		} aenfx;
+		struct {
+			srb_t *sp;
+		} iosb;
+	 } u;
+};
+
+struct qla_chip_state_84xx {
+	struct list_head list;
+	struct kref kref;
+
+	void *bus;
+	spinlock_t access_lock;
+	struct mutex fw_update_mutex;
+	uint32_t fw_update;
+	uint32_t op_fw_version;
+	uint32_t op_fw_size;
+	uint32_t op_fw_seq_size;
+	uint32_t diag_fw_version;
+	uint32_t gold_fw_version;
+};
+
+struct qla_statistics {
+	uint32_t total_isp_aborts;
+	uint64_t input_bytes;
+	uint64_t output_bytes;
+	uint64_t input_requests;
+	uint64_t output_requests;
+	uint32_t control_requests;
+
+	uint64_t jiffies_at_last_reset;
+};
+
+struct bidi_statistics {
+	unsigned long long io_count;
+	unsigned long long transfer_bytes;
+};
+
+/* Multi queue support */
+#define MBC_INITIALIZE_MULTIQ 0x1f
+#define QLA_QUE_PAGE 0X1000
+#define QLA_MQ_SIZE 32
+#define QLA_MAX_QUEUES 256
+#define ISP_QUE_REG(ha, id) \
+	((ha->mqenable || IS_QLA83XX(ha) || IS_QLA27XX(ha)) ? \
+	 ((void __iomem *)ha->mqiobase + (QLA_QUE_PAGE * id)) :\
+	 ((void __iomem *)ha->iobase))
+#define QLA_REQ_QUE_ID(tag) \
+	((tag < QLA_MAX_QUEUES && tag > 0) ? tag : 0)
+#define QLA_DEFAULT_QUE_QOS 5
+#define QLA_PRECONFIG_VPORTS 32
+#define QLA_MAX_VPORTS_QLA24XX	128
+#define QLA_MAX_VPORTS_QLA25XX	256
+/* Response queue data structure */
+struct rsp_que {
+	dma_addr_t  dma;
+	response_t *ring;
+	response_t *ring_ptr;
+	uint32_t __iomem *rsp_q_in;	/* FWI2-capable only. */
+	uint32_t __iomem *rsp_q_out;
+	uint16_t  ring_index;
+	uint16_t  out_ptr;
+	uint16_t  *in_ptr;		/* queue shadow in index */
+	uint16_t  length;
+	uint16_t  options;
+	uint16_t  rid;
+	uint16_t  id;
+	uint16_t  vp_idx;
+	struct qla_hw_data *hw;
+	struct qla_msix_entry *msix;
+	struct req_que *req;
+	srb_t *status_srb; /* status continuation entry */
+	struct work_struct q_work;
+
+	dma_addr_t  dma_fx00;
+	response_t *ring_fx00;
+	uint16_t  length_fx00;
+	uint8_t rsp_pkt[REQUEST_ENTRY_SIZE];
+};
+
+/* Request queue data structure */
+struct req_que {
+	dma_addr_t  dma;
+	request_t *ring;
+	request_t *ring_ptr;
+	uint32_t __iomem *req_q_in;	/* FWI2-capable only. */
+	uint32_t __iomem *req_q_out;
+	uint16_t  ring_index;
+	uint16_t  in_ptr;
+	uint16_t  *out_ptr;		/* queue shadow out index */
+	uint16_t  cnt;
+	uint16_t  length;
+	uint16_t  options;
+	uint16_t  rid;
+	uint16_t  id;
+	uint16_t  qos;
+	uint16_t  vp_idx;
+	struct rsp_que *rsp;
+	srb_t **outstanding_cmds;
+	uint32_t current_outstanding_cmd;
+	uint16_t num_outstanding_cmds;
+	int max_q_depth;
+
+	dma_addr_t  dma_fx00;
+	request_t *ring_fx00;
+	uint16_t  length_fx00;
+	uint8_t req_pkt[REQUEST_ENTRY_SIZE];
+};
+
+/* Place holder for FW buffer parameters */
+struct qlfc_fw {
+	void *fw_buf;
+	dma_addr_t fw_dma;
+	uint32_t len;
+};
+
+struct rdp_req_payload {
+	uint32_t	els_request;
+	uint32_t	desc_list_len;
+
+	/* NPIV descriptor */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint8_t  reserved;
+		uint8_t  nport_id[3];
+	} npiv_desc;
+};
+
+struct rdp_rsp_payload {
+	uint32_t cmd;
+	uint32_t desc_list_len;
+
+	/* LS Request Info descriptor */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint32_t req_payload_word_0;
+	} ls_req_info_desc;
+
+	/* LS Request Info descriptor */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint32_t req_payload_word_0;
+	} ls_req_info_desc2;
+
+	/* SFP diagnostic param descriptor */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint16_t temperature;
+		uint16_t vcc;
+		uint16_t tx_bias;
+		uint16_t tx_power;
+		uint16_t rx_power;
+		uint16_t sfp_flags;
+	} sfp_diag_desc;
+
+	/* Port Speed Descriptor */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint16_t speed_capab;
+		uint16_t operating_speed;
+	} port_speed_desc;
+
+	/* Link Error Status Descriptor */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint32_t link_fail_cnt;
+		uint32_t loss_sync_cnt;
+		uint32_t loss_sig_cnt;
+		uint32_t prim_seq_err_cnt;
+		uint32_t inval_xmit_word_cnt;
+		uint32_t inval_crc_cnt;
+		uint8_t  pn_port_phy_type;
+		uint8_t  reserved[3];
+	} ls_err_desc;
+
+	/* Port name description with diag param */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint8_t WWNN[WWN_SIZE];
+		uint8_t WWPN[WWN_SIZE];
+	} port_name_diag_desc;
+
+	/* Port Name desc for Direct attached Fx_Port or Nx_Port */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint8_t WWNN[WWN_SIZE];
+		uint8_t WWPN[WWN_SIZE];
+	} port_name_direct_desc;
+
+	/* Buffer Credit descriptor */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint32_t fcport_b2b;
+		uint32_t attached_fcport_b2b;
+		uint32_t fcport_rtt;
+	} buffer_credit_desc;
+
+	/* Optical Element Data Descriptor */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint16_t low_alarm;
+		uint16_t high_alarm;
+		uint16_t low_warning;
+		uint16_t high_warning;
+		uint32_t element_flags;
+	} optical_elmt_desc[5];
+
+	/* Optical Product Data Descriptor */
+	struct {
+		uint32_t desc_tag;
+		uint32_t desc_len;
+		uint8_t  vendor_name[16];
+		uint8_t  part_number[16];
+		uint8_t  serial_number[16];
+		uint16_t reserved;
+		uint16_t revision;
+		uint8_t  date[8];
+	} optical_prod_desc;
+};
+
+#define RDP_DESC_LEN(obj) \
+    (sizeof(obj) - sizeof((obj).desc_tag) - sizeof((obj).desc_len))
+
+#define RDP_PORT_SPEED_1GB		BIT_15
+#define RDP_PORT_SPEED_2GB		BIT_14
+#define RDP_PORT_SPEED_4GB		BIT_13
+#define RDP_PORT_SPEED_10GB		BIT_12
+#define RDP_PORT_SPEED_8GB		BIT_11
+#define RDP_PORT_SPEED_16GB		BIT_10
+#define RDP_PORT_SPEED_32GB		BIT_9
+#define RDP_PORT_SPEED_UNKNOWN		BIT_0
+
+struct qlt_hw_data {
+	/* Protected by hw lock */
+	uint32_t enable_class_2:1;
+	uint32_t enable_explicit_conf:1;
+	uint32_t ini_mode_force_reverse:1;
+	uint32_t node_name_set:1;
+
+	dma_addr_t atio_dma;	/* Physical address. */
+	struct atio *atio_ring;	/* Base virtual address */
+	struct atio *atio_ring_ptr;	/* Current address. */
+	uint16_t atio_ring_index; /* Current index. */
+	uint16_t atio_q_length;
+	uint32_t __iomem *atio_q_in;
+	uint32_t __iomem *atio_q_out;
+
+	void *target_lport_ptr;
+	struct qla_tgt_func_tmpl *tgt_ops;
+	struct qla_tgt *qla_tgt;
+	struct qla_tgt_cmd *cmds[DEFAULT_OUTSTANDING_COMMANDS];
+	uint16_t current_handle;
+
+	struct qla_tgt_vp_map *tgt_vp_map;
+	struct mutex tgt_mutex;
+	struct mutex tgt_host_action_mutex;
+
+	int saved_set;
+	uint16_t saved_exchange_count;
+	uint32_t saved_firmware_options_1;
+	uint32_t saved_firmware_options_2;
+	uint32_t saved_firmware_options_3;
+	uint8_t saved_firmware_options[2];
+	uint8_t saved_add_firmware_options[2];
+
+	uint8_t tgt_node_name[WWN_SIZE];
+};
 
 /*
- * Linux Host Adapter structure
+ * Qlogic host adapter specific data structure.
+*/
+struct qla_hw_data {
+	struct pci_dev  *pdev;
+	/* SRB cache. */
+#define SRB_MIN_REQ     128
+	mempool_t       *srb_mempool;
+
+	volatile struct {
+		uint32_t	mbox_int		:1;
+		uint32_t	mbox_busy		:1;
+		uint32_t	disable_risc_code_load	:1;
+		uint32_t	enable_64bit_addressing	:1;
+		uint32_t	enable_lip_reset	:1;
+		uint32_t	enable_target_reset	:1;
+		uint32_t	enable_lip_full_login	:1;
+		uint32_t	enable_led_scheme	:1;
+
+		uint32_t	msi_enabled		:1;
+		uint32_t	msix_enabled		:1;
+		uint32_t	disable_serdes		:1;
+		uint32_t	gpsc_supported		:1;
+		uint32_t	npiv_supported		:1;
+		uint32_t	pci_channel_io_perm_failure	:1;
+		uint32_t	fce_enabled		:1;
+		uint32_t	fac_supported		:1;
+
+		uint32_t	chip_reset_done		:1;
+		uint32_t	running_gold_fw		:1;
+		uint32_t	eeh_busy		:1;
+		uint32_t	cpu_affinity_enabled	:1;
+		uint32_t	disable_msix_handshake	:1;
+		uint32_t	fcp_prio_enabled	:1;
+		uint32_t	isp82xx_fw_hung:1;
+		uint32_t	nic_core_hung:1;
+
+		uint32_t	quiesce_owner:1;
+		uint32_t	nic_core_reset_hdlr_active:1;
+		uint32_t	nic_core_reset_owner:1;
+		uint32_t	isp82xx_no_md_cap:1;
+		uint32_t	host_shutting_down:1;
+		uint32_t	idc_compl_status:1;
+
+		uint32_t        mr_reset_hdlr_active:1;
+		uint32_t        mr_intr_valid:1;
+		uint32_t        fawwpn_enabled:1;
+		uint32_t	qos_supported:1;
+		/* 30 bits */
+	} flags;
+
+	/* This spinlock is used to protect "io transactions", you must
+	* acquire it before doing any IO to the card, eg with RD_REG*() and
+	* WRT_REG*() for the duration of your entire commandtransaction.
+	*
+	* This spinlock is of lower priority than the io request lock.
+	*/
+
+	spinlock_t	hardware_lock ____cacheline_aligned;
+	int		bars;
+	int		mem_only;
+	device_reg_t *iobase;           /* Base I/O address */
+	resource_size_t pio_address;
+
+#define MIN_IOBASE_LEN          0x100
+	dma_addr_t		bar0_hdl;
+
+	void __iomem *cregbase;
+	dma_addr_t		bar2_hdl;
+#define BAR0_LEN_FX00			(1024 * 1024)
+#define BAR2_LEN_FX00			(128 * 1024)
+
+	uint32_t		rqstq_intr_code;
+	uint32_t		mbx_intr_code;
+	uint32_t		req_que_len;
+	uint32_t		rsp_que_len;
+	uint32_t		req_que_off;
+	uint32_t		rsp_que_off;
+
+	/* Multi queue data structs */
+	device_reg_t *mqiobase;
+	device_reg_t *msixbase;
+	uint16_t        msix_count;
+	uint8_t         mqenable;
+	struct req_que **req_q_map;
+	struct rsp_que **rsp_q_map;
+	unsigned long req_qid_map[(QLA_MAX_QUEUES / 8) / sizeof(unsigned long)];
+	unsigned long rsp_qid_map[(QLA_MAX_QUEUES / 8) / sizeof(unsigned long)];
+	uint8_t 	max_req_queues;
+	uint8_t 	max_rsp_queues;
+	struct qla_npiv_entry *npiv_info;
+	uint16_t	nvram_npiv_size;
+
+	uint16_t        switch_cap;
+#define FLOGI_SEQ_DEL           BIT_8
+#define FLOGI_MID_SUPPORT       BIT_10
+#define FLOGI_VSAN_SUPPORT      BIT_12
+#define FLOGI_SP_SUPPORT        BIT_13
+
+	uint8_t		port_no;		/* Physical port of adapter */
+
+	/* Timeout timers. */
+	uint8_t 	loop_down_abort_time;    /* port down timer */
+	atomic_t	loop_down_timer;         /* loop down timer */
+	uint8_t		link_down_timeout;       /* link down timeout */
+	uint16_t	max_loop_id;
+	uint16_t	max_fibre_devices;	/* Maximum number of targets */
+
+	uint16_t	fb_rev;
+	uint16_t	min_external_loopid;    /* First external loop Id */
+
+#define PORT_SPEED_UNKNOWN 0xFFFF
+#define PORT_SPEED_1GB  0x00
+#define PORT_SPEED_2GB  0x01
+#define PORT_SPEED_4GB  0x03
+#define PORT_SPEED_8GB  0x04
+#define PORT_SPEED_16GB 0x05
+#define PORT_SPEED_32GB 0x06
+#define PORT_SPEED_10GB	0x13
+	uint16_t	link_data_rate;         /* F/W operating speed */
+
+	uint8_t		current_topology;
+	uint8_t		prev_topology;
+#define ISP_CFG_NL	1
+#define ISP_CFG_N	2
+#define ISP_CFG_FL	4
+#define ISP_CFG_F	8
+
+	uint8_t		operating_mode;         /* F/W operating mode */
+#define LOOP      0
+#define P2P       1
+#define LOOP_P2P  2
+#define P2P_LOOP  3
+	uint8_t		interrupts_on;
+	uint32_t	isp_abort_cnt;
+
+#define PCI_DEVICE_ID_QLOGIC_ISP2532    0x2532
+#define PCI_DEVICE_ID_QLOGIC_ISP8432    0x8432
+#define PCI_DEVICE_ID_QLOGIC_ISP8001	0x8001
+#define PCI_DEVICE_ID_QLOGIC_ISP8031	0x8031
+#define PCI_DEVICE_ID_QLOGIC_ISP2031	0x2031
+#define PCI_DEVICE_ID_QLOGIC_ISP2071	0x2071
+#define PCI_DEVICE_ID_QLOGIC_ISP2271	0x2271
+#define PCI_DEVICE_ID_QLOGIC_ISP2261	0x2261
+
+	uint32_t	device_type;
+#define DT_ISP2100                      BIT_0
+#define DT_ISP2200                      BIT_1
+#define DT_ISP2300                      BIT_2
+#define DT_ISP2312                      BIT_3
+#define DT_ISP2322                      BIT_4
+#define DT_ISP6312                      BIT_5
+#define DT_ISP6322                      BIT_6
+#define DT_ISP2422                      BIT_7
+#define DT_ISP2432                      BIT_8
+#define DT_ISP5422                      BIT_9
+#define DT_ISP5432                      BIT_10
+#define DT_ISP2532                      BIT_11
+#define DT_ISP8432                      BIT_12
+#define DT_ISP8001			BIT_13
+#define DT_ISP8021			BIT_14
+#define DT_ISP2031			BIT_15
+#define DT_ISP8031			BIT_16
+#define DT_ISPFX00			BIT_17
+#define DT_ISP8044			BIT_18
+#define DT_ISP2071			BIT_19
+#define DT_ISP2271			BIT_20
+#define DT_ISP2261			BIT_21
+#define DT_ISP_LAST			(DT_ISP2261 << 1)
+
+#define DT_T10_PI                       BIT_25
+#define DT_IIDMA                        BIT_26
+#define DT_FWI2                         BIT_27
+#define DT_ZIO_SUPPORTED                BIT_28
+#define DT_OEM_001                      BIT_29
+#define DT_ISP2200A                     BIT_30
+#define DT_EXTENDED_IDS                 BIT_31
+#define DT_MASK(ha)     ((ha)->device_type & (DT_ISP_LAST - 1))
+#define IS_QLA2100(ha)  (DT_MASK(ha) & DT_ISP2100)
+#define IS_QLA2200(ha)  (DT_MASK(ha) & DT_ISP2200)
+#define IS_QLA2300(ha)  (DT_MASK(ha) & DT_ISP2300)
+#define IS_QLA2312(ha)  (DT_MASK(ha) & DT_ISP2312)
+#define IS_QLA2322(ha)  (DT_MASK(ha) & DT_ISP2322)
+#define IS_QLA6312(ha)  (DT_MASK(ha) & DT_ISP6312)
+#define IS_QLA6322(ha)  (DT_MASK(ha) & DT_ISP6322)
+#define IS_QLA2422(ha)  (DT_MASK(ha) & DT_ISP2422)
+#define IS_QLA2432(ha)  (DT_MASK(ha) & DT_ISP2432)
+#define IS_QLA5422(ha)  (DT_MASK(ha) & DT_ISP5422)
+#define IS_QLA5432(ha)  (DT_MASK(ha) & DT_ISP5432)
+#define IS_QLA2532(ha)  (DT_MASK(ha) & DT_ISP2532)
+#define IS_QLA8432(ha)  (DT_MASK(ha) & DT_ISP8432)
+#define IS_QLA8001(ha)	(DT_MASK(ha) & DT_ISP8001)
+#define IS_QLA81XX(ha)	(IS_QLA8001(ha))
+#define IS_QLA82XX(ha)	(DT_MASK(ha) & DT_ISP8021)
+#define IS_QLA8044(ha)  (DT_MASK(ha) & DT_ISP8044)
+#define IS_QLA2031(ha)	(DT_MASK(ha) & DT_ISP2031)
+#define IS_QLA8031(ha)	(DT_MASK(ha) & DT_ISP8031)
+#define IS_QLAFX00(ha)	(DT_MASK(ha) & DT_ISPFX00)
+#define IS_QLA2071(ha)	(DT_MASK(ha) & DT_ISP2071)
+#define IS_QLA2271(ha)	(DT_MASK(ha) & DT_ISP2271)
+#define IS_QLA2261(ha)	(DT_MASK(ha) & DT_ISP2261)
+
+#define IS_QLA23XX(ha)  (IS_QLA2300(ha) || IS_QLA2312(ha) || IS_QLA2322(ha) || \
+			IS_QLA6312(ha) || IS_QLA6322(ha))
+#define IS_QLA24XX(ha)  (IS_QLA2422(ha) || IS_QLA2432(ha))
+#define IS_QLA54XX(ha)  (IS_QLA5422(ha) || IS_QLA5432(ha))
+#define IS_QLA25XX(ha)  (IS_QLA2532(ha))
+#define IS_QLA83XX(ha)	(IS_QLA2031(ha) || IS_QLA8031(ha))
+#define IS_QLA84XX(ha)  (IS_QLA8432(ha))
+#define IS_QLA27XX(ha)  (IS_QLA2071(ha) || IS_QLA2271(ha) || IS_QLA2261(ha))
+#define IS_QLA24XX_TYPE(ha)     (IS_QLA24XX(ha) || IS_QLA54XX(ha) || \
+				IS_QLA84XX(ha))
+#define IS_CNA_CAPABLE(ha)	(IS_QLA81XX(ha) || IS_QLA82XX(ha) || \
+				IS_QLA8031(ha) || IS_QLA8044(ha))
+#define IS_P3P_TYPE(ha)		(IS_QLA82XX(ha) || IS_QLA8044(ha))
+#define IS_QLA2XXX_MIDTYPE(ha)	(IS_QLA24XX(ha) || IS_QLA84XX(ha) || \
+				IS_QLA25XX(ha) || IS_QLA81XX(ha) || \
+				IS_QLA82XX(ha) || IS_QLA83XX(ha) || \
+				IS_QLA8044(ha) || IS_QLA27XX(ha))
+#define IS_MSIX_NACK_CAPABLE(ha) (IS_QLA81XX(ha) || IS_QLA83XX(ha) || \
+				IS_QLA27XX(ha))
+#define IS_NOPOLLING_TYPE(ha)	(IS_QLA81XX(ha) && (ha)->flags.msix_enabled)
+#define IS_FAC_REQUIRED(ha)	(IS_QLA81XX(ha) || IS_QLA83XX(ha) || \
+				IS_QLA27XX(ha))
+#define IS_NOCACHE_VPD_TYPE(ha)	(IS_QLA81XX(ha) || IS_QLA83XX(ha) || \
+				IS_QLA27XX(ha))
+#define IS_ALOGIO_CAPABLE(ha)	(IS_QLA23XX(ha) || IS_FWI2_CAPABLE(ha))
+
+#define IS_T10_PI_CAPABLE(ha)   ((ha)->device_type & DT_T10_PI)
+#define IS_IIDMA_CAPABLE(ha)    ((ha)->device_type & DT_IIDMA)
+#define IS_FWI2_CAPABLE(ha)     ((ha)->device_type & DT_FWI2)
+#define IS_ZIO_SUPPORTED(ha)    ((ha)->device_type & DT_ZIO_SUPPORTED)
+#define IS_OEM_001(ha)          ((ha)->device_type & DT_OEM_001)
+#define HAS_EXTENDED_IDS(ha)    ((ha)->device_type & DT_EXTENDED_IDS)
+#define IS_CT6_SUPPORTED(ha)	((ha)->device_type & DT_CT6_SUPPORTED)
+#define IS_MQUE_CAPABLE(ha)	((ha)->mqenable || IS_QLA83XX(ha) || \
+				IS_QLA27XX(ha))
+#define IS_BIDI_CAPABLE(ha)	((IS_QLA25XX(ha) || IS_QLA2031(ha)))
+/* Bit 21 of fw_attributes decides the MCTP capabilities */
+#define IS_MCTP_CAPABLE(ha)	(IS_QLA2031(ha) && \
+				((ha)->fw_attributes_ext[0] & BIT_0))
+#define IS_PI_UNINIT_CAPABLE(ha)	(IS_QLA83XX(ha) || IS_QLA27XX(ha))
+#define IS_PI_IPGUARD_CAPABLE(ha)	(IS_QLA83XX(ha) || IS_QLA27XX(ha))
+#define IS_PI_DIFB_DIX0_CAPABLE(ha)	(0)
+#define IS_PI_SPLIT_DET_CAPABLE_HBA(ha)	(IS_QLA83XX(ha) || IS_QLA27XX(ha))
+#define IS_PI_SPLIT_DET_CAPABLE(ha)	(IS_PI_SPLIT_DET_CAPABLE_HBA(ha) && \
+    (((ha)->fw_attributes_h << 16 | (ha)->fw_attributes) & BIT_22))
+#define IS_ATIO_MSIX_CAPABLE(ha) (IS_QLA83XX(ha))
+#define IS_TGT_MODE_CAPABLE(ha)	(ha->tgt.atio_q_length)
+#define IS_SHADOW_REG_CAPABLE(ha)	(IS_QLA27XX(ha))
+#define IS_DPORT_CAPABLE(ha) (IS_QLA83XX(ha) || IS_QLA27XX(ha))
+#define IS_FAWWN_CAPABLE(ha)	(IS_QLA83XX(ha) || IS_QLA27XX(ha))
+
+	/* HBA serial number */
+	uint8_t		serial0;
+	uint8_t		serial1;
+	uint8_t		serial2;
+
+	/* NVRAM configuration data */
+#define MAX_NVRAM_SIZE  4096
+#define VPD_OFFSET      MAX_NVRAM_SIZE / 2
+	uint16_t	nvram_size;
+	uint16_t	nvram_base;
+	void		*nvram;
+	uint16_t	vpd_size;
+	uint16_t	vpd_base;
+	void		*vpd;
+
+	uint16_t	loop_reset_delay;
+	uint8_t		retry_count;
+	uint8_t		login_timeout;
+	uint16_t	r_a_tov;
+	int		port_down_retry_count;
+	uint8_t		mbx_count;
+	uint8_t		aen_mbx_count;
+
+	uint32_t	login_retry_count;
+	/* SNS command interfaces. */
+	ms_iocb_entry_t		*ms_iocb;
+	dma_addr_t		ms_iocb_dma;
+	struct ct_sns_pkt	*ct_sns;
+	dma_addr_t		ct_sns_dma;
+	/* SNS command interfaces for 2200. */
+	struct sns_cmd_pkt	*sns_cmd;
+	dma_addr_t		sns_cmd_dma;
+
+#define SFP_DEV_SIZE    256
+#define SFP_BLOCK_SIZE  64
+#define SFP_RTDI_LEN	SFP_BLOCK_SIZE
+#define SFP_RTDI_OFFSET	0x60
+
+	void		*sfp_data;
+	dma_addr_t	sfp_data_dma;
+
+#define XGMAC_DATA_SIZE	4096
+	void		*xgmac_data;
+	dma_addr_t	xgmac_data_dma;
+
+#define DCBX_TLV_DATA_SIZE 4096
+	void		*dcbx_tlv;
+	dma_addr_t	dcbx_tlv_dma;
+
+	struct task_struct	*dpc_thread;
+	uint8_t dpc_active;                  /* DPC routine is active */
+
+	dma_addr_t	gid_list_dma;
+	struct gid_list_info *gid_list;
+	int		gid_list_info_size;
+
+	/* Small DMA pool allocations -- maximum 256 bytes in length. */
+#define DMA_POOL_SIZE   256
+	struct dma_pool *s_dma_pool;
+
+	dma_addr_t	init_cb_dma;
+	init_cb_t	*init_cb;
+	int		init_cb_size;
+	dma_addr_t	ex_init_cb_dma;
+	struct ex_init_cb_81xx *ex_init_cb;
+
+	void		*async_pd;
+	dma_addr_t	async_pd_dma;
+
+	void		*swl;
+
+	/* These are used by mailbox operations. */
+	uint16_t mailbox_out[MAILBOX_REGISTER_COUNT];
+	uint32_t mailbox_out32[MAILBOX_REGISTER_COUNT];
+	uint32_t aenmb[AEN_MAILBOX_REGISTER_COUNT_FX00];
+
+	mbx_cmd_t	*mcp;
+	struct mbx_cmd_32	*mcp32;
+
+	unsigned long	mbx_cmd_flags;
+#define MBX_INTERRUPT		1
+#define MBX_INTR_WAIT		2
+#define MBX_UPDATE_FLASH_ACTIVE	3
+
+	struct mutex vport_lock;        /* Virtual port synchronization */
+	spinlock_t vport_slock; /* order is hardware_lock, then vport_slock */
+	struct completion mbx_cmd_comp; /* Serialize mbx access */
+	struct completion mbx_intr_comp;  /* Used for completion notification */
+	struct completion dcbx_comp;	/* For set port config notification */
+	struct completion lb_portup_comp; /* Used to wait for link up during
+					   * loopback */
+#define DCBX_COMP_TIMEOUT	20
+#define LB_PORTUP_COMP_TIMEOUT	10
+
+	int notify_dcbx_comp;
+	int notify_lb_portup_comp;
+	struct mutex selflogin_lock;
+
+	/* Basic firmware related information. */
+	uint16_t	fw_major_version;
+	uint16_t	fw_minor_version;
+	uint16_t	fw_subminor_version;
+	uint16_t	fw_attributes;
+	uint16_t	fw_attributes_h;
+	uint16_t	fw_attributes_ext[2];
+	uint32_t	fw_memory_size;
+	uint32_t	fw_transfer_size;
+	uint32_t	fw_srisc_address;
+#define RISC_START_ADDRESS_2100 0x1000
+#define RISC_START_ADDRESS_2300 0x800
+#define RISC_START_ADDRESS_2400 0x100000
+	uint16_t	fw_xcb_count;
+	uint16_t	fw_iocb_count;
+
+	uint32_t	fw_shared_ram_start;
+	uint32_t	fw_shared_ram_end;
+
+	uint16_t	fw_options[16];         /* slots: 1,2,3,10,11 */
+	uint8_t		fw_seriallink_options[4];
+	uint16_t	fw_seriallink_options24[4];
+
+	uint8_t		mpi_version[3];
+	uint32_t	mpi_capabilities;
+	uint8_t		phy_version[3];
+	uint8_t		pep_version[3];
+
+	/* Firmware dump template */
+	void		*fw_dump_template;
+	uint32_t	fw_dump_template_len;
+	/* Firmware dump information. */
+	struct qla2xxx_fw_dump *fw_dump;
+	uint32_t	fw_dump_len;
+	int		fw_dumped;
+	unsigned long	fw_dump_cap_flags;
+#define RISC_PAUSE_CMPL		0
+#define DMA_SHUTDOWN_CMPL	1
+#define ISP_RESET_CMPL		2
+#define RISC_RDY_AFT_RESET	3
+#define RISC_SRAM_DUMP_CMPL	4
+#define RISC_EXT_MEM_DUMP_CMPL	5
+#define ISP_MBX_RDY		6
+#define ISP_SOFT_RESET_CMPL	7
+	int		fw_dump_reading;
+	int		prev_minidump_failed;
+	dma_addr_t	eft_dma;
+	void		*eft;
+/* Current size of mctp dump is 0x086064 bytes */
+#define MCTP_DUMP_SIZE  0x086064
+	dma_addr_t	mctp_dump_dma;
+	void		*mctp_dump;
+	int		mctp_dumped;
+	int		mctp_dump_reading;
+	uint32_t	chain_offset;
+	struct dentry *dfs_dir;
+	struct dentry *dfs_fce;
+	dma_addr_t	fce_dma;
+	void		*fce;
+	uint32_t	fce_bufs;
+	uint16_t	fce_mb[8];
+	uint64_t	fce_wr, fce_rd;
+	struct mutex	fce_mutex;
+
+	uint32_t	pci_attr;
+	uint16_t	chip_revision;
+
+	uint16_t	product_id[4];
+
+	uint8_t		model_number[16+1];
+#define BINZERO		"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+	char		model_desc[80];
+	uint8_t		adapter_id[16+1];
+
+	/* Option ROM information. */
+	char		*optrom_buffer;
+	uint32_t	optrom_size;
+	int		optrom_state;
+#define QLA_SWAITING	0
+#define QLA_SREADING	1
+#define QLA_SWRITING	2
+	uint32_t	optrom_region_start;
+	uint32_t	optrom_region_size;
+
+/* PCI expansion ROM image information. */
+#define ROM_CODE_TYPE_BIOS	0
+#define ROM_CODE_TYPE_FCODE	1
+#define ROM_CODE_TYPE_EFI	3
+	uint8_t 	bios_revision[2];
+	uint8_t 	efi_revision[2];
+	uint8_t 	fcode_revision[16];
+	uint32_t	fw_revision[4];
+
+	uint32_t	gold_fw_version[4];
+
+	/* Offsets for flash/nvram access (set to ~0 if not used). */
+	uint32_t	flash_conf_off;
+	uint32_t	flash_data_off;
+	uint32_t	nvram_conf_off;
+	uint32_t	nvram_data_off;
+
+	uint32_t	fdt_wrt_disable;
+	uint32_t	fdt_wrt_enable;
+	uint32_t	fdt_erase_cmd;
+	uint32_t	fdt_block_size;
+	uint32_t	fdt_unprotect_sec_cmd;
+	uint32_t	fdt_protect_sec_cmd;
+	uint32_t	fdt_wrt_sts_reg_cmd;
+
+	uint32_t        flt_region_flt;
+	uint32_t        flt_region_fdt;
+	uint32_t        flt_region_boot;
+	uint32_t        flt_region_boot_sec;
+	uint32_t        flt_region_fw;
+	uint32_t        flt_region_fw_sec;
+	uint32_t        flt_region_vpd_nvram;
+	uint32_t        flt_region_vpd;
+	uint32_t        flt_region_vpd_sec;
+	uint32_t        flt_region_nvram;
+	uint32_t        flt_region_npiv_conf;
+	uint32_t	flt_region_gold_fw;
+	uint32_t	flt_region_fcp_prio;
+	uint32_t	flt_region_bootload;
+	uint32_t	flt_region_img_status_pri;
+	uint32_t	flt_region_img_status_sec;
+	uint8_t         active_image;
+
+	/* Needed for BEACON */
+	uint16_t        beacon_blink_led;
+	uint8_t         beacon_color_state;
+#define QLA_LED_GRN_ON		0x01
+#define QLA_LED_YLW_ON		0x02
+#define QLA_LED_ABR_ON		0x04
+#define QLA_LED_ALL_ON		0x07	/* yellow, green, amber. */
+					/* ISP2322: red, green, amber. */
+	uint16_t        zio_mode;
+	uint16_t        zio_timer;
+
+	struct qla_msix_entry *msix_entries;
+
+	struct list_head        vp_list;        /* list of VP */
+	unsigned long   vp_idx_map[(MAX_MULTI_ID_FABRIC / 8) /
+			sizeof(unsigned long)];
+	uint16_t        num_vhosts;     /* number of vports created */
+	uint16_t        num_vsans;      /* number of vsan created */
+	uint16_t        max_npiv_vports;        /* 63 or 125 per topoloty */
+	int             cur_vport_count;
+
+	struct qla_chip_state_84xx *cs84xx;
+	struct qla_statistics qla_stats;
+	struct isp_operations *isp_ops;
+	struct workqueue_struct *wq;
+	struct qlfc_fw fw_buf;
+
+	/* FCP_CMND priority support */
+	struct qla_fcp_prio_cfg *fcp_prio_cfg;
+
+	struct dma_pool *dl_dma_pool;
+#define DSD_LIST_DMA_POOL_SIZE  512
+
+	struct dma_pool *fcp_cmnd_dma_pool;
+	mempool_t       *ctx_mempool;
+#define FCP_CMND_DMA_POOL_SIZE 512
+
+	unsigned long	nx_pcibase;		/* Base I/O address */
+	uint8_t		*nxdb_rd_ptr;		/* Doorbell read pointer */
+	unsigned long	nxdb_wr_ptr;		/* Door bell write pointer */
+
+	uint32_t	crb_win;
+	uint32_t	curr_window;
+	uint32_t	ddr_mn_window;
+	unsigned long	mn_win_crb;
+	unsigned long	ms_win_crb;
+	int		qdr_sn_window;
+	uint32_t	fcoe_dev_init_timeout;
+	uint32_t	fcoe_reset_timeout;
+	rwlock_t	hw_lock;
+	uint16_t	portnum;		/* port number */
+	int		link_width;
+	struct fw_blob	*hablob;
+	struct qla82xx_legacy_intr_set nx_legacy_intr;
+
+	uint16_t	gbl_dsd_inuse;
+	uint16_t	gbl_dsd_avail;
+	struct list_head gbl_dsd_list;
+#define NUM_DSD_CHAIN 4096
+
+	uint8_t fw_type;
+	__le32 file_prd_off;	/* File firmware product offset */
+
+	uint32_t	md_template_size;
+	void		*md_tmplt_hdr;
+	dma_addr_t      md_tmplt_hdr_dma;
+	void            *md_dump;
+	uint32_t	md_dump_size;
+
+	void		*loop_id_map;
+
+	/* QLA83XX IDC specific fields */
+	uint32_t	idc_audit_ts;
+	uint32_t	idc_extend_tmo;
+
+	/* DPC low-priority workqueue */
+	struct workqueue_struct *dpc_lp_wq;
+	struct work_struct idc_aen;
+	/* DPC high-priority workqueue */
+	struct workqueue_struct *dpc_hp_wq;
+	struct work_struct nic_core_reset;
+	struct work_struct idc_state_handler;
+	struct work_struct nic_core_unrecoverable;
+	struct work_struct board_disable;
+
+	struct mr_data_fx00 mr;
+
+	struct qlt_hw_data tgt;
+	int	allow_cna_fw_dump;
+};
+
+/*
+ * Qlogic scsi host structure
  */
 typedef struct scsi_qla_host {
 	struct list_head list;
+	struct list_head vp_fcports;	/* list of fcports */
+	struct list_head work_list;
+	spinlock_t work_lock;
 
 	/* Commonly used flags and state information. */
 	struct Scsi_Host *host;
-	struct pci_dev	*pdev;
-
 	unsigned long	host_no;
-	unsigned long	instance;
+	uint8_t		host_str[16];
 
 	volatile struct {
 		uint32_t	init_done		:1;
 		uint32_t	online			:1;
-		uint32_t	mbox_int		:1;
-		uint32_t	mbox_busy		:1;
-		uint32_t	rscn_queue_overflow	:1;
 		uint32_t	reset_active		:1;
 
 		uint32_t	management_server_logged_in :1;
-                uint32_t	process_response_queue	:1;
+		uint32_t	process_response_queue	:1;
+		uint32_t	difdix_supported:1;
+		uint32_t	delete_progress:1;
 
-		uint32_t	disable_risc_code_load	:1;
-		uint32_t	enable_64bit_addressing	:1;
-		uint32_t	enable_lip_reset	:1;
-		uint32_t	enable_lip_full_login	:1;
-		uint32_t	enable_target_reset	:1;
-		uint32_t	enable_led_scheme	:1;
-		uint32_t	msi_enabled		:1;
-		uint32_t	msix_enabled		:1;
-		uint32_t	enable_ip		:1;
-		uint32_t	disable_serdes		:1;
-		uint32_t	gpsc_supported		:1;
+		uint32_t	fw_tgt_reported:1;
+		uint32_t	bbcr_enable:1;
 	} flags;
 
 	atomic_t	loop_state;
@@ -2364,270 +3669,58 @@ typedef struct scsi_qla_host {
 #define LOOP_DEAD	6
 
 	unsigned long   dpc_flags;
-#define	RESET_MARKER_NEEDED	0	/* Send marker to ISP. */
-#define	RESET_ACTIVE		1
-#define	ISP_ABORT_NEEDED	2	/* Initiate ISP abort. */
-#define	ABORT_ISP_ACTIVE	3	/* ISP abort in progress. */
-#define	LOOP_RESYNC_NEEDED	4	/* Device Resync needed. */
-#define	LOOP_RESYNC_ACTIVE	5
-#define LOCAL_LOOP_UPDATE       6	/* Perform a local loop update. */
-#define RSCN_UPDATE             7	/* Perform an RSCN update. */
-#define MAILBOX_RETRY           8
-#define ISP_RESET_NEEDED        9	/* Initiate a ISP reset. */
-#define FAILOVER_EVENT_NEEDED   10
-#define FAILOVER_EVENT		11
-#define FAILOVER_NEEDED   	12
-#define SCSI_RESTART_NEEDED	13	/* Processes SCSI retry queue. */
-#define PORT_RESTART_NEEDED	14	/* Processes Retry queue. */
-#define RESTART_QUEUES_NEEDED	15	/* Restarts the Lun queue. */
-#define ABORT_QUEUES_NEEDED	16
-#define RELOGIN_NEEDED	        17
-#define LOGIN_RETRY_NEEDED	18	/* Initiate required fabric logins. */
-#define REGISTER_FC4_NEEDED	19	/* SNS FC4 registration required. */
-#define ISP_ABORT_RETRY         20      /* ISP aborted. */
-#define FCPORT_RESCAN_NEEDED	21      /* IO descriptor processing needed */
-#define IODESC_PROCESS_NEEDED	22      /* IO descriptor processing needed */
-#define IOCTL_ERROR_RECOVERY	23
-#define LOOP_RESET_NEEDED	24
-#define BEACON_BLINK_NEEDED	25
-#define REGISTER_FDMI_NEEDED	26
+#define RESET_MARKER_NEEDED	0	/* Send marker to ISP. */
+#define RESET_ACTIVE		1
+#define ISP_ABORT_NEEDED	2	/* Initiate ISP abort. */
+#define ABORT_ISP_ACTIVE	3	/* ISP abort in progress. */
+#define LOOP_RESYNC_NEEDED	4	/* Device Resync needed. */
+#define LOOP_RESYNC_ACTIVE	5
+#define LOCAL_LOOP_UPDATE	6	/* Perform a local loop update. */
+#define RSCN_UPDATE		7	/* Perform an RSCN update. */
+#define RELOGIN_NEEDED		8
+#define REGISTER_FC4_NEEDED	9	/* SNS FC4 registration required. */
+#define ISP_ABORT_RETRY		10	/* ISP aborted. */
+#define BEACON_BLINK_NEEDED	11
+#define REGISTER_FDMI_NEEDED	12
+#define FCPORT_UPDATE_NEEDED	13
+#define VP_DPC_NEEDED		14	/* wake up for VP dpc handling */
+#define UNLOADING		15
+#define NPIV_CONFIG_NEEDED	16
+#define ISP_UNRECOVERABLE	17
+#define FCOE_CTX_RESET_NEEDED	18	/* Initiate FCoE context reset */
+#define MPI_RESET_NEEDED	19	/* Initiate MPI FW reset */
+#define ISP_QUIESCE_NEEDED	20	/* Driver need some quiescence */
+#define SCR_PENDING		21	/* SCR in target mode */
+#define PORT_UPDATE_NEEDED	22
+#define FX00_RESET_RECOVERY	23
+#define FX00_TARGET_SCAN	24
+#define FX00_CRITEMP_RECOVERY	25
+#define FX00_HOST_INFO_RESEND	26
+#define FX00_FW_INFO_UPDATE	27
+#define PROCESS_PUREX_IOCB	28
 
 	uint32_t	device_flags;
-#define DFLG_LOCAL_DEVICES		BIT_0
-#define DFLG_RETRY_LOCAL_DEVICES	BIT_1
-#define DFLG_FABRIC_DEVICES		BIT_2
-#define	SWITCH_FOUND			BIT_3
-#define	DFLG_NO_CABLE			BIT_4
-
-	uint32_t	device_type;
-#define DT_ISP2100			BIT_0
-#define DT_ISP2200			BIT_1
-#define DT_ISP2300			BIT_2
-#define DT_ISP2312			BIT_3
-#define DT_ISP2322			BIT_4
-#define DT_ISP6312			BIT_5
-#define DT_ISP6322			BIT_6
-#define DT_ISP2422			BIT_7
-#define DT_ISP2432			BIT_8
-#define DT_ISP5422			BIT_9
-#define DT_ISP5432			BIT_10
-#define DT_ISP_LAST			(DT_ISP5432 << 1)
-
-#define DT_OEM_001			BIT_29
-#define DT_ISP2200A			BIT_30
-#define DT_EXTENDED_IDS			BIT_31
-
-#define DT_MASK(ha)	((ha)->device_type & (DT_ISP_LAST - 1))
-#define IS_QLA2100(ha)	(DT_MASK(ha) & DT_ISP2100)
-#define IS_QLA2200(ha)	(DT_MASK(ha) & DT_ISP2200)
-#define IS_QLA2300(ha)	(DT_MASK(ha) & DT_ISP2300)
-#define IS_QLA2312(ha)	(DT_MASK(ha) & DT_ISP2312)
-#define IS_QLA2322(ha)	(DT_MASK(ha) & DT_ISP2322)
-#define IS_QLA6312(ha)	(DT_MASK(ha) & DT_ISP6312)
-#define IS_QLA6322(ha)	(DT_MASK(ha) & DT_ISP6322)
-#define IS_QLA2422(ha)	(DT_MASK(ha) & DT_ISP2422)
-#define IS_QLA2432(ha)	(DT_MASK(ha) & DT_ISP2432)
-#define IS_QLA5422(ha)	(DT_MASK(ha) & DT_ISP5422)
-#define IS_QLA5432(ha)	(DT_MASK(ha) & DT_ISP5432)
-
-#define IS_QLA23XX(ha)	(IS_QLA2300(ha) || IS_QLA2312(ha) || IS_QLA2322(ha) || \
-    			 IS_QLA6312(ha) || IS_QLA6322(ha))
-#define IS_QLA24XX(ha)	(IS_QLA2422(ha) || IS_QLA2432(ha))
-#define IS_QLA54XX(ha)	(IS_QLA5422(ha) || IS_QLA5432(ha))
-
-#define IS_OEM_001(ha)		((ha)->device_type & DT_OEM_001)
-#define HAS_EXTENDED_IDS(ha)	((ha)->device_type & DT_EXTENDED_IDS)
-
-#define IS_OEM_1_HBA(ssvid, ssdid) ((ssvid == 0x103C && \
-                    (ssdid == 0x12BA || ssdid == 0x12C2 || \
-                     ssdid == 0x12C7 || ssdid == 0x12C9 )) || \
-		    (ssvid == 0x1077 && ssdid == 0x0131))
-
-
-	/* SRB cache. */
-#define SRB_MIN_REQ	128
-	mempool_t	*srb_mempool;
-
-	/* This spinlock is used to protect "io transactions", you must
-	 * aquire it before doing any IO to the card, eg with RD_REG*() and
-	 * WRT_REG*() for the duration of your entire commandtransaction.
-	 *
-	 * This spinlock is of lower priority than the io request lock.
-	 */
-
-	spinlock_t		hardware_lock ____cacheline_aligned;
-
-	device_reg_t __iomem *iobase;		/* Base I/O address */
-	unsigned long	pio_address;
-	unsigned long	pio_length;
-#define MIN_IOBASE_LEN		0x100
-
-	/* ISP ring lock, rings, and indexes */
-	dma_addr_t	request_dma;        /* Physical address. */
-	request_t       *request_ring;      /* Base virtual address */
-	request_t       *request_ring_ptr;  /* Current address. */
-	uint16_t        req_ring_index;     /* Current index. */
-	uint16_t        req_q_cnt;          /* Number of available entries. */
-	uint16_t	request_q_length;
-
-	dma_addr_t	response_dma;       /* Physical address. */
-	response_t      *response_ring;     /* Base virtual address */
-	response_t      *response_ring_ptr; /* Current address. */
-	uint16_t        rsp_ring_index;     /* Current index. */
-	uint16_t	response_q_length;
-
-	int		(*start_scsi)(srb_t *);
-	void		(*process_resp_q)(struct scsi_qla_host *);
-	uint16_t	(*calc_request_entries)(uint16_t);
-	void		(*build_scsi_iocbs)(srb_t *, cmd_entry_t *, uint16_t);
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18)
-	irqreturn_t	(*intr_handler)(int, void *);
-#define QLA_IRQ_HANDLER(_name) \
-	irqreturn_t _name(int irq, void *dev_id)
-#else
-	irqreturn_t	(*intr_handler)(int, void *, struct pt_regs *);
-#define QLA_IRQ_HANDLER(_name) \
-	irqreturn_t _name(int irq, void *dev_id, struct pt_regs *regs)
-#endif
-
-	/* Outstandings ISP commands. */
-	srb_t		*outstanding_cmds[MAX_OUTSTANDING_COMMANDS];
-	uint32_t	current_outstanding_cmd;
-	srb_t		*status_srb;	/* Status continuation entry. */
-
-	/*
-	 * Need to hold the list_lock with irq's disabled in order to access
-	 * the following list.
-	 *
-	 * This list_lock is of lower priority than the host_lock.
-	 */
-	spinlock_t		list_lock ____cacheline_aligned;
-						/* lock to guard lists which
-						 * hold srb_t's */
-        struct list_head        retry_queue;    /* watchdog queue */
-        struct list_head        done_queue;     /* job on done queue */
-        struct list_head        failover_queue; /* failover list link. */
-	struct list_head        scsi_retry_queue;     /* SCSI retry queue */
-	struct list_head        pending_queue;	/* SCSI command pending queue */
-
-	unsigned long    done_q_cnt;
-	unsigned long    pending_in_q;
-        uint32_t	retry_q_cnt;
-        uint32_t	scsi_retry_q_cnt;
-        uint32_t	failover_cnt;
-
-	uint16_t           revision;
-	uint8_t           ports;
-	u_long            actthreads;
-	u_long            ipreq_cnt;
-	u_long            qthreads;
-
-	uint32_t        total_isr_cnt;		/* Interrupt count */
-	uint32_t        total_isp_aborts;	/* controller err cnt */
-	uint32_t        total_lip_cnt;		/* LIP cnt */
-	uint32_t	total_dev_errs;		/* device error cnt */
-	uint32_t	total_ios;		/* IO cnt */
-	uint64_t	total_bytes;		/* xfr byte cnt */
-	uint32_t	total_mbx_timeout;	/* mailbox timeout cnt */
-	uint32_t 	total_loop_resync; 	/* loop resyn cnt */
-	uint32_t	dropped_frame_error_cnt;
+#define SWITCH_FOUND		BIT_0
+#define DFLG_NO_CABLE		BIT_1
+#define DFLG_DEV_FAILED		BIT_5
 
 	/* ISP configuration data. */
 	uint16_t	loop_id;		/* Host adapter loop id */
-	uint16_t	fb_rev;
+	uint16_t        self_login_loop_id;     /* host adapter loop id
+						 * get it on self login
+						 */
+	fc_port_t       bidir_fcport;		/* fcport used for bidir cmnds
+						 * no need of allocating it for
+						 * each command
+						 */
 
 	port_id_t	d_id;			/* Host adapter port id */
-	uint16_t	max_public_loop_ids;
-	uint16_t	min_external_loopid;	/* First external loop Id */
-
-#define PORT_SPEED_UNKNOWN 0xFFFF
-#define PORT_SPEED_1GB	0x00
-#define PORT_SPEED_2GB	0x01
-#define PORT_SPEED_4GB	0x03
-	uint16_t	link_data_rate;		/* F/W operating speed */
-
-	uint8_t		current_topology;
-	uint8_t		prev_topology;
-#define ISP_CFG_NL	1
-#define ISP_CFG_N	2
-#define ISP_CFG_FL	4
-#define ISP_CFG_F	8
-
-	uint8_t		operating_mode;		/* F/W operating mode */
-#define LOOP      0
-#define P2P       1
-#define LOOP_P2P  2
-#define P2P_LOOP  3
-
-        uint8_t		marker_needed;
-	uint8_t		sns_retry_cnt;
-	uint8_t		mem_err;
-
-	uint8_t		interrupts_on;
-
-	/* HBA serial number */
-	uint8_t		serial0;
-	uint8_t		serial1;
-	uint8_t		serial2;
-
-	/* NVRAM configuration data */
-	uint16_t	nvram_size;
-	uint16_t	nvram_base;
-
-	uint16_t	loop_reset_delay;
-	uint16_t	minimum_timeout;
-	uint8_t		retry_count;
-	uint8_t		login_timeout;
-	uint16_t	r_a_tov;
-	int		port_down_retry_count;
-	uint8_t		loop_down_timeout;
-	uint8_t		mbx_count;
-	uint16_t	max_probe_luns;
-	uint16_t	max_luns;
-	uint16_t	max_targets;
-	uint16_t	last_loop_id;
+	uint8_t		marker_needed;
 	uint16_t	mgmt_svr_loop_id;
 
-        uint32_t	login_retry_count;
 
-	/* Fibre Channel Device List. */
-	struct list_head	fcports;
-	struct list_head	rscn_fcports;
-
-	struct io_descriptor	io_descriptors[MAX_IO_DESCRIPTORS];
-	uint16_t		iodesc_signature;
-
-	/* OS target queue pointers. */
-	os_tgt_t		*otgt[MAX_FIBRE_DEVICES];
-
-	/* RSCN queue. */
-	uint32_t rscn_queue[MAX_RSCN_COUNT];
-	uint8_t rscn_in_ptr;
-	uint8_t rscn_out_ptr;
-
-	/* SNS command interfaces. */
-	ms_iocb_entry_t		*ms_iocb;
-	dma_addr_t		ms_iocb_dma;
-	struct ct_sns_pkt	*ct_sns;
-	dma_addr_t		ct_sns_dma;
-	/* SNS command interfaces for 2200. */
-	struct sns_cmd_pkt	*sns_cmd;
-	dma_addr_t		sns_cmd_dma;
-
-#define SFP_DEV_SIZE  256
-#define SFP_BLOCK_SIZE        64
-	void			*sfp_data;
-	dma_addr_t		sfp_data_dma;
-
-	pid_t			dpc_pid;
-	int			dpc_should_die;
-	struct completion	dpc_inited;
-	struct completion	dpc_exited;
-	struct semaphore	*dpc_wait;
-	uint8_t dpc_active;                  /* DPC routine is active */
 
 	/* Timeout timers. */
-	uint8_t         queue_restart_timer;
 	uint8_t         loop_down_abort_time;    /* port down timer */
 	atomic_t        loop_down_timer;         /* loop down timer */
 	uint8_t         link_down_timeout;       /* link down timeout */
@@ -2635,160 +3728,78 @@ typedef struct scsi_qla_host {
 	uint32_t        timer_active;
 	struct timer_list        timer;
 
-	dma_addr_t	gid_list_dma;
-	struct gid_list_info *gid_list;
+	uint8_t		node_name[WWN_SIZE];
+	uint8_t		port_name[WWN_SIZE];
+	uint8_t		fabric_node_name[WWN_SIZE];
+	uint8_t		fabric_port_name[WWN_SIZE];
 
-	dma_addr_t	rlc_rsp_dma;
-	rpt_lun_cmd_rsp_t *rlc_rsp;
+	uint16_t	fcoe_vlan_id;
+	uint16_t	fcoe_fcf_idx;
+	uint8_t		fcoe_vn_port_mac[6];
 
-	/* Small DMA pool allocations -- maximum 256 bytes in length. */
-#define DMA_POOL_SIZE	256
-	struct dma_pool *s_dma_pool;
+	uint32_t	vp_abort_cnt;
 
-	dma_addr_t	init_cb_dma;
-	init_cb_t	*init_cb;
-	int		init_cb_size;
+	struct fc_vport	*fc_vport;	/* holds fc_vport * for each vport */
+	uint16_t        vp_idx;		/* vport ID */
 
-	dma_addr_t	iodesc_pd_dma;
-	port_database_t *iodesc_pd;
+	unsigned long		vp_flags;
+#define VP_IDX_ACQUIRED		0	/* bit no 0 */
+#define VP_CREATE_NEEDED	1
+#define VP_BIND_NEEDED		2
+#define VP_DELETE_NEEDED	3
+#define VP_SCR_NEEDED		4	/* State Change Request registration */
+#define VP_CONFIG_OK		5	/* Flag to cfg VP, if FW is ready */
+	atomic_t 		vp_state;
+#define PHYSICAL_PORT		0
+#define NPIV_PORT		1
+#define SRIOV_PORT		2
+#define VP_OFFLINE		0
+#define VP_ACTIVE		1
+#define VP_FAILED		2
+	uint16_t 	vp_err_state;
+	uint16_t	vp_prev_err_state;
+#define VP_ERR_UNKWN		0
+#define VP_ERR_PORTDWN		1
+#define VP_ERR_FAB_UNSUPPORTED	2
+#define VP_ERR_FAB_NORESOURCES	3
+#define VP_ERR_FAB_LOGOUT	4
+#define VP_ERR_ADAP_NORESOURCES	5
+	struct qla_hw_data *hw;
+	struct req_que *req;
+	int		fw_heartbeat_counter;
+	int		seconds_since_last_heartbeat;
+	struct fc_host_statistics fc_host_stat;
+	struct qla_statistics qla_stats;
+	struct bidi_statistics bidi_stats;
 
-	/* These are used by mailbox operations. */
-	volatile uint16_t mailbox_out[MAILBOX_REGISTER_COUNT];
+	int	security_supp;
+	atomic_t	vref_count;
+	struct qla8044_reset_template reset_tmplt;
 
-	mbx_cmd_t	*mcp;
-	unsigned long	mbx_cmd_flags;
-#define MBX_INTERRUPT	1
-#define MBX_INTR_WAIT	2
-#define MBX_UPDATE_FLASH_ACTIVE	3
-
-	spinlock_t	mbx_reg_lock;   /* Mbx Cmd Register Lock */
-
-	struct semaphore mbx_cmd_sem;	/* Serialialize mbx access */
-	struct semaphore mbx_intr_sem;  /* Used for completion notification */
-
-	uint32_t	mbx_flags;
-#define  MBX_IN_PROGRESS	BIT_0
-#define  MBX_BUSY		BIT_1	/* Got the Access */
-#define  MBX_SLEEPING_ON_SEM	BIT_2
-#define  MBX_POLLING_FOR_COMP	BIT_3
-#define  MBX_COMPLETED		BIT_4
-#define  MBX_TIMEDOUT		BIT_5
-#define  MBX_ACCESS_TIMEDOUT	BIT_6
-
-	mbx_cmd_t 	mc;
-
-	uint8_t	*cmdline;
-
-	uint32_t failover_type;
-	uint32_t failback_delay;
-	unsigned long   cfg_flags;
-#define	CFG_ACTIVE	0	/* CFG during a failover, event update, or ioctl */
-#define	CFG_FAILOVER	1	/* CFG during path change */
-
-	uint32_t	binding_type;
-#define BIND_BY_PORT_NAME	0
-#define BIND_BY_PORT_ID		1
-
-	/* Basic firmware related information. */
-	struct qla_board_info	*brd_info;
-	uint16_t	fw_major_version;
-	uint16_t	fw_minor_version;
-	uint16_t	fw_subminor_version;
-	uint16_t	fw_attributes;
-	uint32_t	fw_memory_size;
-	uint32_t	fw_transfer_size;
-
-	uint16_t	fw_options[16];		/* slots: 1,2,3,10,11 */
-	uint8_t		fw_seriallink_options[4];
-	uint16_t	fw_seriallink_options24[4];
-
-	/* Firmware dump information. */
-	struct qla2xxx_fw_dump *fw_dump;
-	uint32_t	fw_dump_len;
-	int		fw_dumped;
-	int		fw_dump_reading;
-	dma_addr_t	eft_dma;
-	void		*eft;
-
-	uint8_t		host_str[16];
-	uint32_t	pci_attr;
-
-	uint16_t	product_id[4];
-
-	uint8_t		model_number[16+1];
-#define BINZERO		"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-	char		*model_desc;
-	uint8_t		adapter_id[16+1];
-
-#ifdef CONFIG_SCSI_QLA2XXX_FAILOVER
-/* following are new and needed for IOCTL support */
-	struct hba_ioctl *ioctl;
-
-	void        *ioctl_mem;
-	dma_addr_t  ioctl_mem_phys;
-	uint32_t    ioctl_mem_size;
-
-	struct scsi_cmnd *ioctl_err_cmd;
-
-	/* PCI expansion ROM image information. */
-	unsigned long	code_types;
-#define ROM_CODE_TYPE_BIOS	0
-#define ROM_CODE_TYPE_FCODE	1
-#define ROM_CODE_TYPE_EFI	3
-
-	uint8_t		bios_revision[2];
-	uint8_t		efi_revision[2];
-	uint8_t		fcode_revision[16];
-	uint32_t	fw_revision[4];
-#endif
-	uint8_t		*node_name;
-	uint8_t		*port_name;
-	uint32_t    isp_abort_cnt;
-
-	/* Adapter I/O statistics for failover */
-	uint64_t	IosRequested;
-	uint64_t	BytesRequested;
-	uint64_t	IosExecuted;
-	uint64_t	BytesExecuted;
-
-	/* Needed for BEACON */
-	uint8_t		beacon_blink_led;
- 	uint8_t		beacon_color_state;
-#define QLA_LED_GRN_ON		0x01
-#define QLA_LED_YLW_ON		0x02
-#define QLA_LED_ABR_ON		0x04
-#define QLA_LED_ALL_ON		0x07	/* yellow, green, amber */
-#define QLA_LED_RGA_ON		0x07	/* isp2322: red, green, amber */
-
-#ifdef CONFIG_SCSI_QLA2XXX_FAILOVER
-	/* Data for IP support */
-	uint8_t		ip_port_name[WWN_SIZE];
-
-	struct risc_rec_entry *risc_rec_q;
-	dma_addr_t	risc_rec_q_dma;
-	uint16_t	rec_entries_in;
-	uint16_t	rec_entries_out;
-
-	struct send_cb	*active_scb_q[MAX_SEND_PACKETS];
-	uint32_t	current_scb_q_idx;
-
-	uint32_t	mtu;
-	uint16_t	header_size;
-	uint16_t	max_receive_buffers;
-	struct buffer_cb *receive_buffers;
-	uint32_t	receive_buff_data_size;
-
-	void		(*send_completion_routine)
-				(struct send_cb *scb);
-	void		*receive_packets_context;
-	void		(*receive_packets_routine)
-				(void *context, struct buffer_cb *bcb);
-	void		*notify_context;
-	void		(*notify_routine)
-				(void *context, uint32_t type);
-#endif
+	/* PUREX IOCB data area */
+	void *purex_data;
+	uint16_t	bbcr;
+	uint16_t enhanced_features;
 } scsi_qla_host_t;
 
+#define SET_VP_IDX	1
+#define SET_AL_PA	2
+#define RESET_VP_IDX	3
+#define RESET_AL_PA	4
+struct qla_tgt_vp_map {
+	uint8_t	idx;
+	scsi_qla_host_t *vha;
+};
+
+struct qla27xx_image_status {
+	uint8_t image_status_mask;
+	uint16_t generation_number;
+	uint8_t reserved[3];
+	uint8_t ver_minor;
+	uint8_t ver_major;
+	uint32_t checksum;
+	uint32_t signature;
+} __packed;
 
 /*
  * Macros to help code, maintain, etc.
@@ -2798,23 +3809,24 @@ typedef struct scsi_qla_host {
 	 test_bit(LOOP_RESYNC_NEEDED, &ha->dpc_flags) || \
 	 atomic_read(&ha->loop_state) == LOOP_DOWN)
 
-#define LOOP_NOT_READY(ha) \
-	((test_bit(ISP_ABORT_NEEDED, &ha->dpc_flags) || \
-	  test_bit(ABORT_ISP_ACTIVE, &ha->dpc_flags) || \
-	  test_bit(LOOP_RESYNC_NEEDED, &ha->dpc_flags) || \
-	  test_bit(LOOP_RESYNC_ACTIVE, &ha->dpc_flags)) || \
-	 atomic_read(&ha->loop_state) == LOOP_DOWN)
+#define STATE_TRANSITION(ha) \
+		(test_bit(ISP_ABORT_NEEDED, &ha->dpc_flags) || \
+			 test_bit(LOOP_RESYNC_NEEDED, &ha->dpc_flags))
 
-#define LOOP_RDY(ha)	(!LOOP_NOT_READY(ha))
+#define QLA_VHA_MARK_BUSY(__vha, __bail) do {		     \
+	atomic_inc(&__vha->vref_count);			     \
+	mb();						     \
+	if (__vha->flags.delete_progress) {		     \
+		atomic_dec(&__vha->vref_count);		     \
+		__bail = 1;				     \
+	} else {					     \
+		__bail = 0;				     \
+	}						     \
+} while (0)
 
-#define TGT_Q(ha, t) (ha->otgt[t])
-#define LUN_Q(ha, t, l)	(TGT_Q(ha, t)->olun[l])
-#define GET_LU_Q(ha, t, l) ((TGT_Q(ha,t) != NULL)? TGT_Q(ha, t)->olun[l] : NULL)
-
-#define to_qla_host(x)		((scsi_qla_host_t *) (x)->hostdata)
-
-#define qla_printk(level, ha, format, arg...) \
-	dev_printk(level , &((ha)->pdev->dev) , format , ## arg)
+#define QLA_VHA_MARK_NOT_BUSY(__vha) do {		     \
+	atomic_dec(&__vha->vref_count);			     \
+} while (0)
 
 /*
  * qla2x00 local function return status codes
@@ -2840,55 +3852,39 @@ typedef struct scsi_qla_host {
 #define QLA_ABORTED			0x105
 #define QLA_SUSPENDED			0x106
 #define QLA_BUSY			0x107
-#define QLA_RSCNS_HANDLED		0x108
 #define QLA_ALREADY_REGISTERED		0x109
-#define QLA_PORT_LOGGED_OUT		0x10a
-
-/*
-* Stat info for all adpaters
-*/
-struct _qla2x00stats  {
-        unsigned long   mboxtout;            /* mailbox timeouts */
-        unsigned long   mboxerr;             /* mailbox errors */
-        unsigned long   ispAbort;            /* ISP aborts */
-        unsigned long   debugNo;
-        unsigned long   loop_resync;
-        unsigned long   outarray_full;
-        unsigned long   retry_q_cnt;
-};
 
 #define NVRAM_DELAY()		udelay(10)
-
-#define INVALID_HANDLE	(MAX_OUTSTANDING_COMMANDS+1)
-
-#ifndef DID_IMM_RETRY
-#define DID_IMM_RETRY  DID_BUS_BUSY
-#endif
 
 /*
  * Flash support definitions
  */
-#define FLASH_IMAGE_SIZE	131072
+#define OPTROM_SIZE_2300	0x20000
+#define OPTROM_SIZE_2322	0x100000
+#define OPTROM_SIZE_24XX	0x100000
+#define OPTROM_SIZE_25XX	0x200000
+#define OPTROM_SIZE_81XX	0x400000
+#define OPTROM_SIZE_82XX	0x800000
+#define OPTROM_SIZE_83XX	0x1000000
 
-#ifdef CONFIG_SCSI_QLA2XXX_FAILOVER
-#include "qla_foln.h"
-#endif
+#define OPTROM_BURST_SIZE	0x1000
+#define OPTROM_BURST_DWORDS	(OPTROM_BURST_SIZE / 4)
+
+#define	QLA_DSDS_PER_IOCB	37
+
+#define CMD_SP(Cmnd)		((Cmnd)->SCp.ptr)
+
+#define QLA_SG_ALL	1024
+
+extern int ql2xsmartsan;
+
+enum nexus_wait_type {
+	WAIT_HOST = 0,
+	WAIT_TARGET,
+	WAIT_LUN,
+};
+
 #include "qla_gbl.h"
 #include "qla_dbg.h"
 #include "qla_inline.h"
-#include "qla_listops.h"
-
-/*
-* String arrays
-*/
-#define LINESIZE    256
-#define MAXARGS      26
-
-#define CMD_SP(Cmnd)		((Cmnd)->SCp.ptr)
-#define CMD_COMPL_STATUS(Cmnd)  ((Cmnd)->SCp.this_residual)
-#define CMD_RESID_LEN(Cmnd)	((Cmnd)->SCp.buffers_residual)
-#define CMD_SCSI_STATUS(Cmnd)	((Cmnd)->SCp.Status)
-#define CMD_ACTUAL_SNSLEN(Cmnd)	((Cmnd)->SCp.Message)
-#define CMD_ENTRY_STATUS(Cmnd)	((Cmnd)->SCp.have_data_in)
-
 #endif

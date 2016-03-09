@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # QLogic ISP2x00 device driver dump reader
-# Copyright (C) 2003-2004 QLogic Corporation
+# Copyright (C) 2003-2014 QLogic Corporation
 # (www.qlogic.com)
 # 
 # This program is free software; you can redistribute it and/or modify it
@@ -18,7 +18,8 @@ version=1.039720
 sysfs=/sys
 qstats=${sysfs}/class/scsi_host/host${1}/device/stats
 qfwd=${sysfs}/class/scsi_host/host${1}/device/fw_dump
-dfile=fw_dump_${1}_`eval date +%Y%m%d_%H%M%S`.txt
+dfile=qla2xxx_fw_dump_${1}_`eval date +%Y%m%d_%H%M%S`.txt
+mctpfile=mctp_dump_${1}_`eval date +%Y%m%d_%H%M%S`.txt
 
 # Get host number
 if [ -z "${1}" ] ; then
@@ -52,9 +53,21 @@ echo 0 > ${qfwd}
 if ! test -s "${dfile}" ; then
 	echo "No firmware dump available at host ${1}!!!"
 	rm ${dfile}
-	exit 1
+else
+	gzip ${dfile}
+	echo "Firmware dumped to file ${dfile}.gz."
 fi
 
-echo "Firmware dumped to file ${dfile}."
+# Go with mctp dump
+echo 7 > ${qfwd}
+cat ${qfwd} > ${mctpfile}
+echo 6 > ${qfwd}
+if ! test -s "${mctpfile}" ; then
+	echo "No mctp dump available at host ${1}!!!"
+	rm ${mctpfile}
+else
+	gzip ${mctpfile}
+	echo "Mctp dumped to file ${mctpfile}.gz."
+fi
 
 exit 0

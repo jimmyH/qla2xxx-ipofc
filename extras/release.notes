@@ -1,0 +1,200 @@
+/************************************************************************
+ * QLogic Fibre Channel/Fibre Channel over Ethernet HBA Driver
+ * Copyright (c)  2003-2014 QLogic Corporation
+ *
+ * Revision List File.
+ * See LICENSE.qla2xxx for copyright and licensing details.
+ *
+ ************************************************************************
+ *
+ * Revision History
+ *
+ *   * 8.07.00.34.12.0-k		SC		12/16/2015
+ *      - qla2xxx: Add support to disable laser for ISP27XX.
+ *      - qla2xxx: Add RDP extensions.
+ *      - qla2xxx: Set relogin flag when we fail to queue login requests.
+ *      - qla2xxx: Fix default value descriptions for module parameters.
+ *      - qla2xxx: Enable T10-DIF for ISP27XX
+ *      - qla2xxx: Use valid BBCR offset and datatype
+ *      - Revert "qla2xxx: Set echo test mailbox command option bit15 correctly."
+ *
+ *   * 8.07.00.33.12.0-k		JC		11/12/2015
+ *      - extras: Improve qlssen.sh usage.
+ *      - qla2xxx: Provide mbx info in BBCR data after mbx failure
+ *      - qla2xxx: Set echo test mailbox command option bit15 correctly.
+ *      - qla2xxx: Correct FDMI vendor port state value.
+ *
+ *   * 8.07.00.32.12.0-k		SC		10/27/2015
+ *      - Revert "qla2xxx: Flush mailbox commands after timeout."
+ *      - Revert "qla2xxx: Set priority for mailbox commands."
+ *
+ *   * 8.07.00.31.12.0-k		SC		10/13/2015
+ *      - qla2xxx: Avoid side effects when using endianizer macros.
+ *      - qla2xxx: Fix warnings reported by static checker.
+ *      - qla2xxx: Fix printks in ql_log message
+ *      - qla2xxx: Fix printk in qla25xx_setup_mode
+ *      - qla2xxx: fix busy wait regression
+ *      - qla2xxx: fix race in handling rport deletion during recovery causes panic
+ *      - qla2xxx: Set priority for mailbox commands.
+ *      - qla2xxx: Flush mailbox commands after timeout.
+ *      - extras: Add script to enable/disable vendor fdmi (and rebuild initrd image).
+ *
+ *   * 8.07.00.30.12.0-k		SC		09/28/2015
+ *      - qla2xxx: Add support for Private link statistics counters.
+ *      - qla2xxx: Add support for buffer to buffer credit value for ISP27XX.
+ *      - qla2xxx: Add support for online flash update for ISP27XX.
+ *      - extras: Add Modules.supported file.
+ *
+ *   * 8.07.00.29.12.0-k		SC		08/18/2015
+ *      - extras: Script for extracting all logs/debugs from driver source
+ *      - qla2xxx: Defer marking device lost when receiving an RSCN.
+ *      - qla2xxx: Convert stray printk's in qla_nx.c to ql_log's.
+ *      - qla2xxx: Allow fw to hold status before sending ABTS response.
+ *      - qla2xxx: Seed init-cb login timeout from nvram exclusively.
+ *      - qla2xxx: Remove unneeded link offline message.
+ *      - qla2xxx: Fix couple of small typos in qla2xxx module code.
+ *      - qla2xxx: Qualify ELS RDP mapping for ISP25xx and ISP26xx only.
+ *      - qla2xxx: Restructure RDP routine to handle failure cases.
+ *      - qla2xxx: Reduce multiple FDMI routines into a single routine.
+ *      - qla2xxx: Simplify debug prints of wwnn, wwpn, and port id. 
+ *      - qla2xxx: Avoid asynchronous abort requests.
+ *
+ *   * 8.07.00.28.12.0-k		SC		07/01/2015
+ *      - qla2xxx: Fix endianess of fdmi smartsan security support field.
+ *      - qla2xxx: Reduce target mode performance hit in ISR.
+ *
+ *   * 8.07.00.27.12.0-k		SC		06/24/2015
+ *      - qla2xxx: Avoid crossing initiator/target modes during AEN handling.
+ *
+ *   * 8.07.00.26.12.0-k		SC		06/09/2015
+ *      - qla2xxx: Set smartsan security support to 1.
+ *      - qla2xxx: Add support for ISP2722.
+ *      - qla2xxx: Fix missing device login retries.
+ *      - qla2xxx: do not clear slot in outstanding cmd array
+ *
+ *   * 8.07.00.25.12.0-k		SC		05/29/2015
+ *      - qla2xxx: Remove decrement of sp reference count in abort handler.
+ *
+ *   * 8.07.00.24.12.0-k		SC		04/17/2015
+ *      - qla2xxx: Add support to show MPI and PEP FW version for ISP27xx.
+ *      - qla2xxx: Do not crash system for sp ref count zero.
+ *      - qla2xxx: Do not reset adapter if SRB handle is in range.
+ *      - qla2xxx: Don't reset ISP when we receive an error entry with an out of range handle.
+ *
+ *   * 8.07.00.23.12.0-k		SC		04/06/2015
+ *      - qla2xxx: Fix RPD response missing fabric name.
+ *      - qla2xxx: fix porting changes for SmartSAN.
+ *
+ *   * 8.07.00.22.12.0-k		HM		03/31/2015
+ *	- qla2xxx: Update default Hostname
+ * 	- qla2xxx: Add adapter checks for FAWWN functionality.
+ * 	- qla2xxx: Use correct macro for SFP flags.
+ * 	- qla2xxx: Use physical port for sending RPRT command
+ * 	- qla2xxx: Allow RPRT to work with all switches.
+ * 	- Revert "qla2xxx: Allow FDMI Hostname registration during boot."
+ *	- Revert "qla2xxx: additional fdmi_register() attempt."
+ *
+ *   * 8.07.00.21.12.0-k		SC		03/24/2015
+ *      - qla2xxx: additional fdmi_register() attempt.
+ *      - qla2xxx: Fix missing SFP flags from RDP Payload.
+ *      - qla2xxx: driver fails to detect 4G adapters.
+ *      - qla2xxx: Pause risc before manipulating risc semaphore.
+ *      - qla2xxx: Use ssdid to gate semaphore manipulation.
+ *      - qla2xxx: Handle AEN8014 incoming port logout.
+ *      - qla2xxx: Add serdes register read/write support for ISP25xx.
+ *      - Revert "qla2xxx: Don't reset ISP when we receive an error entry with an out of range handle."
+ *      - Revert "qla2xxx: Do not reset adapter if SRB handle is in range."
+ *      - Revert "qla2xxx: Do not crash system for sp ref count zero"
+ *      - Revert "qla2xxx: Disable FCE and FET tracing for ISP27XXX"
+ *
+ *   * 8.07.00.20.12.0-k		HM		03/09/2015
+ * 	- qla2xxx: Trigger FDMI registration for RPRT.
+ * 	- qla2xxx: Remove SmartSAN attributes from the RDP payload.
+ * 	- qla2xxx: Allow FDMI Hostname registration during boot.
+ * 	- qla2xxx: Updated Active FC4 port type.
+ *
+ *   * 8.07.00.19.12.0-k                HM              02/26/2015
+ *      - qla2xxx: FDMI RDP command support.
+ *      - qla2xxx: Support for FDMI Smart SAN Mamangement commands
+ *
+ *   * 8.07.00.18.12.0-k		CD		01/27/2015
+ *      - qla2xxx: Restore physical port WWPN only, when port down detected for FA-WWPN port.
+ *      - qla2xxx: Fix virtual port configuration, when switch port is disabled/enabled.
+ *      - qla2xxx: Prevent multiple firmware dump collection for ISP27XX.
+ *      - qla2xxx: Disable Interrupt handshake for ISP27XX.
+ *      - qla2xxx: Add debugging info for MBX timeout.
+ *      - qla2xxx: Add serdes read/write support for ISP27XX
+ *      - qla2xxx: Don't reset ISP when we receive an error entry with an out of range handle.
+ *      - qla2xxx: Do not reset adapter if SRB handle is in range.
+ *      - qla2xxx: Do not crash system for sp ref count zero.
+ *      - qla2xxx: Add support for Legacy and MSI interrupt modes.
+ *
+ *   * 8.07.00.17.12.0-k		CD		11/06/2014
+ *      - qla2xxx: Disable FCE and FET tracing for ISP27XXX
+ *      - qla2xxx: Add udev notification to save fw dump for ISP27XX
+ *      - qla2xxx: Add message for sucessful FW dump collected for ISP27XX.
+ *      - qla2xxx: Add support to load firmware from file for ISP 26XX/27XX.
+ *      - qla2xxx: Add fix for beacon for ISP27XX.
+ *      - qla2xxx: Increase the wait time for firmware to be ready for P3P.
+ *      - qla2xxx: fix crash due to wrong casting of reg for ISP27XX.
+ *
+ *   * 8.07.00.16.12.0-k		CD		09/17/2014
+ *      - qla2xxx: update fc_host for WWPN after cable pull
+ *      - qla2xxx: Move warning message to debug level.
+ *      - qla2xxx: Fail adapter initialization on load ram failure.
+ *      - qla2xxx: Disable PCI device in shutdown handler.
+ *      - qla2xxx: Mark port lost when we receive an RSCN for it.
+ *
+ *   * 8.07.00.15.12.0-k		CD		09/04/2014
+ *      - qla2xxx: Restore WWPN in case of Loop Dead.
+ *      - qla2xxx: Honor FCP_RSP retry delay timer field.
+ *      - qla2xxx: Add missing ISP27xx checks to optrom code.
+ *      - qla2xxx: Force use of mailbox interface for flash access commands for ISP27xx.
+ *      - qla2xxx: Fix mismatch is checks to free sysfs nodes.
+ *      - qla2xxx: Disable laser for ISP2031 while unloading driver.
+ *      - qla2xxx: Enable DPORT using NVRAM parameters.
+ *
+ *   * 8.07.00.14.12.0-k3               HP              08/25/2014
+ *  - qla2xxx: Declaration error cause stack corruption.
+ *  - qla2xxx: Add fix in driver unload for pending activity.
+ *  - qla2xxx: Unload of qla2xxx driver crashes the machine.
+ *  - qla2xxx: Fix duplicate log message ID.
+ *  - qla2xxx: Allow user to change ql2xfdmienable value.
+ *  - qla2xxx: Fix driver version string message.
+ *
+ *   * 8.07.00.13.12.0-k3               HP              08/11/2014
+ *  - qla2xxx: Removed FC_PORTSPEED_32GBIT definition as its part of FC transport.
+
+ *   * 8.07.00.13.12.0-k2               HP              08/06/2014
+ *  - qla2xxx: Pass in transport supported PI at session initialization.
+ *  - qla2xxx: Remove TF_CIT_TMPL macro.
+ *
+ *   * 8.07.00.13.12.0-k                HP              07/11/2014
+ *  - qla2xxx: Allow nvram bit to enable D-PORT.
+ *  - qla2xxx: Allow nvram bit to enable FA-WWN.
+ *  - qla2xxx: Remove restriction on starting remote device discovery on port update.
+ *  - qla2xxx: Move mailbox failure messages to a default debug level.
+ *
+ *   * 8.07.00.12.12.0-k                HP              06/12/2014
+ *  - qla2xxx: Add ql2xasynclogin module parameter.
+ *  - qla2xxx: Add scatter/gather table size module parameter.
+ *  - qla2xxx: Correction to FA-WWN for un-acquiring portname.
+ *
+ *   * 8.07.00.11.12.0-k                HP              05/16/2014
+ *  - qla2xxx: fix incorrect debug printk.
+ *  - qla2xxx: Add D-Port functionality.
+ *  - qla2xxx: Add FA-WWN functionality.
+ *  - qla2xxx: Add FDMI-2 functionality.
+ *  - qla2xxx: ISPFx00 unexpected resets during adapter boot sequence.
+ *  - qla2xxx: Incorrect linked list semantic in qlafx00_get_fcport().
+ *  - extras: Add unknown parameter error handling to build.sh.
+ *
+ *   * 8.07.00.10.12.0-k                HP              04/30/2014
+ *	- qla2xxx: Incorrect debug level on mailbox command print 0x1111.
+ *	- qla2xxx: Fix potential return count bug in qla2xxx_get_vpd_field().
+ *	- qla2xxx: ISP27xx fwdump template error print simplification.
+ *	- qla2xxx: ISP25xx multiqueue shadow register crash fix.
+ *	- qla2xxx: ISPFX00 avoid writing semaphore register in request_irqs().
+ *
+ *   * 8.07.00.09.12.0-k                CD              04/11/2014
+ *      - Initial driver for SLES 12.

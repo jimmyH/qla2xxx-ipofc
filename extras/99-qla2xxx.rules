@@ -1,0 +1,6 @@
+#
+# RULES FILE: located in /etc/udev/rules.d/
+#
+
+# qla2xxx driver
+SUBSYSTEM=="pci", ENV{DRIVER}=="qla2xxx", ACTION=="change", RUN+="qla2xxx_udev.sh"
