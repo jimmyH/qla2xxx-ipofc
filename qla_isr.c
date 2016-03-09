@@ -6,6 +6,7 @@
  */
 #include "qla_def.h"
 #include "qla_target.h"
+#include "qla_ip.h"
 
 #include <linux/delay.h>
 #include <linux/slab.h>
@@ -2603,6 +2604,13 @@ void qla24xx_process_response_queue(struct scsi_qla_host *vha,
 		case PUREX_IOCB_TYPE:
 		    qla24xx_purex_iocb(vha, rsp->req, pkt);
 		    break;
+                case IP_COMMAND_24XX:
+                        qla24xx_ip_send_complete(vha, pkt->handle,
+                            le16_to_cpu(pkt->comp_status));
+                        break;
+                case IP_RECEIVE_24XX:
+                        qla24xx_ip_receive(vha, (struct ip_rec_entry_24xx *)pkt);
+                        break;
 		default:
 			/* Type Not Supported. */
 			ql_dbg(ql_dbg_async, vha, 0x5042,

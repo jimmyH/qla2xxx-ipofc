@@ -2866,3 +2866,119 @@ queuing_error:
 	spin_unlock_irqrestore(&ha->hardware_lock, flags);
 	return rval;
 }
+
+
+// IP related stuff..
+
+/**
+ * qla2x00_isp_cmd() - Modify the request ring pointer.
+ * @ha: HA context
+ *
+ * Note: The caller must hold the hardware lock before calling this routine.
+ */
+void
+qla2x00_isp_cmd(scsi_qla_host_t *vha)
+{
+	struct qla_hw_data *ha = vha->hw;
+
+        ql_dbg(ql_dbg_disc, vha, 0x0, "%s(): IOCB data:\n", __func__);
+        //DEBUG5(qla2x00_dump_buffer(
+        //    (uint8_t *)vha->req->ring_ptr, REQUEST_ENTRY_SIZE));
+
+        /* Adjust ring index. */
+        vha->req->ring_index++;
+        if (vha->req->ring_index == vha->req->length) {
+                vha->req->ring_index = 0;
+                vha->req->ring_ptr = vha->req->ring;
+        } else
+                vha->req->ring_ptr++;
+
+        /* Set chip new ring index. */
+        if (IS_QLA24XX(ha) || IS_QLA54XX(ha)) {
+                struct device_reg_24xx __iomem *reg24 =
+                    (struct device_reg_24xx __iomem *) ha->iobase;
+                WRT_REG_DWORD(&reg24->req_q_in, vha->req->ring_index);
+                RD_REG_DWORD_RELAXED(&reg24->req_q_in); /* PCI Posting. */
+        } else {
+        	device_reg_t __iomem *reg = ha->iobase;
+                WRT_REG_WORD(ISP_REQ_Q_IN(ha, &reg->isp), vha->req->ring_index);
+                RD_REG_WORD_RELAXED(ISP_REQ_Q_IN(ha, &reg->isp)); /* PCI Posting. */
+        }
+
+}
+
+/**
+ * qla2x00_req_pkt() - Retrieve a request packet from the request ring.
+ * @ha: HA context
+ *
+ * Note: The caller must hold the hardware lock before calling this routine.
+ *
+ * Returns NULL if function failed, else, a pointer to the request packet.
+ */
+void *
+qla2x00_req_pkt(scsi_qla_host_t *vha)
+{
+	struct qla_hw_data *ha = vha->hw;
+	struct req_que *req = vha->req;
+        device_reg_t __iomem *reg = ha->iobase;
+        struct device_reg_24xx __iomem *reg24 =
+            (struct device_reg_24xx __iomem *) ha->iobase;
+        request_t       *pkt = NULL;
+        uint16_t        cnt;
+        uint32_t        *dword_ptr;
+        uint32_t        timer;
+        uint16_t        req_cnt = 1;
+
+        /* Wait 1 second for slot. */
+        for (timer = HZ; timer; timer--) {
+                if ((req_cnt + 2) >= req->cnt) {
+                        /* Calculate number of free request entries. */
+                        if (IS_QLA24XX(ha) || IS_QLA54XX(ha))
+                                cnt = (uint16_t)RD_REG_DWORD(&reg24->req_q_out);
+                        else
+                                cnt = qla2x00_debounce_register(
+                                    ISP_REQ_Q_OUT(ha, &reg->isp));
+                        if  (req->ring_index < cnt)
+                                req->cnt = cnt - req->ring_index;
+                        else
+                                req->cnt = req->length -
+                                    (req->ring_index - cnt);
+                }
+                /* If room for request in request ring. */
+                if ((req_cnt + 2) < req->cnt) {
+                        req->cnt--;
+                        pkt = req->ring_ptr;
+
+                        /* Zero out packet. */
+                        dword_ptr = (uint32_t *)pkt;
+                        for (cnt = 0; cnt < REQUEST_ENTRY_SIZE / 4; cnt++)
+                                *dword_ptr++ = 0;
+
+                        /* Set system defined field. */
+                        pkt->sys_define = (uint8_t)req->ring_index;
+
+                        /* Set entry count. */
+                        pkt->entry_count = 1;
+
+                        break;
+                }
+
+                /* Release ring specific lock */
+                spin_unlock(&ha->hardware_lock);
+
+                udelay(2);   /* 2 us */
+
+                /* Check for pending interrupts. */
+                /* During init we issue marker directly */
+                if (!vha->marker_needed)
+                        qla2x00_poll(ha->rsp_q_map[0]);
+
+                spin_lock_irq(&ha->hardware_lock);
+        }
+        if (!pkt) {
+                ql_dbg(ql_dbg_disc, vha, 0x0, "%s(): **** FAILED ****\n", __func__);
+        }
+
+        return (pkt);
+}
+

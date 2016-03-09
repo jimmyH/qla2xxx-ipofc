@@ -20,6 +20,11 @@
 
 #include "qla_target.h"
 
+LIST_HEAD(qla_hostlist);
+DEFINE_RWLOCK(qla_hostlist_lock);
+
+extern int include_me;
+
 /*
  * Driver version
  */
@@ -2917,6 +2922,13 @@ skip_dpc:
 		} else
 			base_vha->flags.difdix_supported = 0;
 	}
+
+	// Save the adapter(s) so we can access it from the IP stuff
+	include_me = 2;  // FOO
+        /* Insert new entry into the list of adapters */
+        write_lock(&qla_hostlist_lock);
+        list_add_tail(&base_vha->list, &qla_hostlist);
+        write_unlock(&qla_hostlist_lock);
 
 	ha->isp_ops->enable_intrs(ha);
 

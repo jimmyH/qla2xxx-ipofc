@@ -30,7 +30,7 @@
  * Context:
  *	Kernel context.
  */
-static int
+int
 qla2x00_mailbox_command(scsi_qla_host_t *vha, mbx_cmd_t *mcp)
 {
 	int		rval, i;

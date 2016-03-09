@@ -5146,6 +5146,7 @@ qla24xx_nvram_config(scsi_qla_host_t *vha)
 	ha->serial2 = icb->port_name[7];
 	memcpy(vha->node_name, icb->node_name, WWN_SIZE);
 	memcpy(vha->port_name, icb->port_name, WWN_SIZE);
+        memcpy(vha->ip.ip_port_name, icb->port_name, WWN_SIZE);
 
 	icb->execution_throttle = __constant_cpu_to_le16(0xFFFF);
 

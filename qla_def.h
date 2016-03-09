@@ -3780,6 +3780,43 @@ typedef struct scsi_qla_host {
 	void *purex_data;
 	uint16_t	bbcr;
 	uint16_t enhanced_features;
+
+	struct {
+        /* Data for IP support */
+#define MAX_SEND_PACKETS		32
+		u_long            ipreq_cnt;
+
+	        uint8_t         ip_port_name[WWN_SIZE];
+
+	        struct risc_rec_entry *risc_rec_q;
+		dma_addr_t      risc_rec_q_dma;
+	        uint16_t        rec_entries_in;
+	        uint16_t        rec_entries_out;
+
+	        struct send_cb  *active_scb_q[MAX_SEND_PACKETS];
+	        uint32_t        current_scb_q_idx;
+
+	        uint32_t        mtu;
+	        uint16_t        header_size;
+	        uint16_t        max_receive_buffers;
+	        struct buffer_cb *receive_buffers;
+	        uint32_t        receive_buff_data_size;
+
+	        void            (*send_completion_routine)
+	                                (struct send_cb *scb);
+	        void            *receive_packets_context;
+	        void            (*receive_packets_routine)
+	                                (void *context, struct buffer_cb *bcb);
+	        void            *notify_context;
+	        void            (*notify_routine)
+      	                          (void *context, uint32_t type);
+
+		volatile struct {
+			uint32_t	enable_ip		:1;
+		} flags;
+	} ip;
+
+
 } scsi_qla_host_t;
 
 #define SET_VP_IDX	1
