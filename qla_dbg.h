@@ -7,6 +7,8 @@
 
 #include "qla_def.h"
 
+#define LOG2CIRC
+
 /*
  * Firmware Dump structure definition
  */

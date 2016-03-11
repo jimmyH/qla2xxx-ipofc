@@ -44,6 +44,11 @@ static const char *qla_version = "2.00.00b1-j1";
 #include "qla_ip.h"		/* Common include file with scsi driver */
 #include "qla2xip.h"
 
+#ifdef LOG2CIRC
+extern void qla2xxx_log2circ_init(void);
+extern void qla2xxx_log2circ_exit(void);
+#endif
+
 /* Module command line parameters */
 static int mtu = DEFAULT_MTU_SIZE;
 static int buffers = DEFAULT_RECEIVE_BUFFERS;
@@ -859,6 +864,11 @@ qla2xip_init(void)
 	adapters_found = 0;
 	version_display = 0;
 
+#ifdef LOG2CIRC
+	qla2xxx_log2circ_init();
+	ql2xextended_error_logging=0x7fffffff;
+#endif
+
 	/* Allocate buffer for backdoor inquiry to SCSI driver */
 	inq_data = kmalloc(sizeof(struct bd_inquiry), GFP_KERNEL);
 	if (inq_data == NULL) {
@@ -1062,6 +1072,10 @@ qla2xip_exit(void)
 {
 	struct qla2xip_private *qdev;
 	struct net_device *next;
+
+#ifdef LOG2CIRC
+	qla2xxx_log2circ_exit();
+#endif
 
 	while (root_dev) {
 		qdev = netdev_priv(root_dev);

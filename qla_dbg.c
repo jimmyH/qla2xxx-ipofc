@@ -2469,6 +2469,111 @@ ql_mask_match(uint32_t level)
 	return (level & ql2xextended_error_logging) == level;
 }
 
+#ifdef LOG2CIRC
+
+#define LOG2CIRC_SIZE (1024*1024*1024)
+static void* log2circ_buf = NULL;
+static unsigned long log2circ_free = LOG2CIRC_SIZE;
+static void* log2circ_wr_ptr = NULL;
+static DEFINE_SPINLOCK(log2circ_lock);
+
+module_param(log2circ_free, long, S_IRUGO);
+MODULE_PARM_DESC(log2circ_free,"log2circ_free");
+
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+
+static void* log2circ_seq_start(struct seq_file *s, loff_t *pos)
+{
+	char* ptr = (char*)log2circ_buf;
+	char* end = (char*)log2circ_wr_ptr;
+
+	if (!ptr) return NULL;
+
+	if (*pos>=end-ptr)
+	{
+		return NULL;
+	}
+
+	return pos;
+}
+
+static  void* log2circ_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	char* ptr = (char*)log2circ_buf;
+	char* end = (char*)log2circ_wr_ptr;
+
+	unsigned long len = strnlen(ptr+*pos,4096) + 1;
+
+	*pos+=len;
+	if (*pos>=end-ptr) return NULL;
+	return pos;
+}
+
+static void log2circ_seq_stop(struct seq_file *s, void *v)
+{
+
+}
+
+static int log2circ_seq_show(struct seq_file *s, void *v)
+{
+	char* ptr = (char*)log2circ_buf;
+	loff_t *pos = (loff_t*)v;
+	seq_printf(s,"%s",ptr+*pos);
+	return 0;
+}
+
+static struct seq_operations log2circ_seq_ops = {
+  .start = log2circ_seq_start,
+  .next = log2circ_seq_next,
+  .stop = log2circ_seq_stop,
+  .show = log2circ_seq_show
+};
+
+static int log2circ_proc_open(struct inode *inode, struct  file *file) {
+  return seq_open(file,&log2circ_seq_ops);
+}
+
+static const struct file_operations log2circ_proc_fops = {
+  .owner = THIS_MODULE,
+  .open = log2circ_proc_open,
+  .read = seq_read,
+  .llseek = seq_lseek,
+  .release = seq_release,
+};
+
+
+void qla2xxx_log2circ_init(void)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&log2circ_lock,flags);
+	if (!log2circ_buf)
+	{
+		log2circ_buf = vmalloc(LOG2CIRC_SIZE);
+		log2circ_wr_ptr = log2circ_buf;
+		printk("qla2xxx_log2circ_init(): Allocated %d bytes at 0x%p (0x%lx phys)\n",LOG2CIRC_SIZE,log2circ_buf,(unsigned long)virt_to_phys(log2circ_buf));
+	}
+	spin_unlock_irqrestore(&log2circ_lock,flags);
+	proc_create("log2circ_proc", 0, NULL, &log2circ_proc_fops);
+}
+EXPORT_SYMBOL_GPL(qla2xxx_log2circ_init);
+
+void qla2xxx_log2circ_exit(void)
+{
+	unsigned long flags;
+	remove_proc_entry("log2circ_proc", NULL);
+	spin_lock_irqsave(&log2circ_lock,flags);
+	if (log2circ_buf)
+	{
+		vfree(log2circ_buf);
+		log2circ_buf = NULL;
+	}
+	spin_unlock_irqrestore(&log2circ_lock,flags);
+}
+EXPORT_SYMBOL_GPL(qla2xxx_log2circ_exit);
+
+#endif
+
 /*
  * This function is for formatting and logging debug information.
  * It is to be used when vha is available. It formats the message
@@ -2496,6 +2601,56 @@ ql_dbg(uint32_t level, scsi_qla_host_t *vha, int32_t id, const char *fmt, ...)
 	vaf.fmt = fmt;
 	vaf.va = &va;
 
+#ifdef LOG2CIRC
+	if (log2circ_buf)
+	{
+		unsigned long flags;
+		spin_lock_irqsave(&log2circ_lock,flags);
+		if (log2circ_buf)
+		{
+			if (log2circ_free)
+			{
+				int rc;
+				unsigned long long t = sched_clock();
+				unsigned long nanosec_rem = do_div(t,1000000000);
+				if (vha != NULL) {
+					const struct pci_dev *pdev = vha->hw->pdev;
+					rc = snprintf(log2circ_wr_ptr,log2circ_free,"[%5lu.%06lu] %s [%s]-%04x:%ld: ",(unsigned long)t,nanosec_rem/1000,QL_MSGHDR, dev_name(&(pdev->dev)), id + ql_dbg_offset,
+                        vha->host_no);
+				} else {
+					rc = snprintf(log2circ_wr_ptr,log2circ_free,"[%5lu.%06lu] %s [%s]-%04x: : ",(unsigned long)t,nanosec_rem/1000,QL_MSGHDR, "0000:00:00.0", id + ql_dbg_offset);
+				}
+
+				if (rc<0 || rc>log2circ_free)
+				{
+					log2circ_free = 0;
+				}
+				else
+				{
+					rc+=1; // include null
+					log2circ_free -= rc;
+					log2circ_wr_ptr+= rc;
+				}
+
+				rc = vsnprintf(log2circ_wr_ptr,log2circ_free,fmt,va);
+
+				if (rc<0 || rc>log2circ_free)
+				{
+					log2circ_free = 0;
+				}
+				else
+				{
+					rc+=1; // include null
+					log2circ_free -= rc;
+					log2circ_wr_ptr+= rc;
+				}
+			}
+		}
+		spin_unlock_irqrestore(&log2circ_lock,flags);
+	}
+	else
+#endif
+	{
 	if (vha != NULL) {
 		const struct pci_dev *pdev = vha->hw->pdev;
 		/* <module-name> <pci-name> <msg-id>:<host> Message */
@@ -2506,10 +2661,13 @@ ql_dbg(uint32_t level, scsi_qla_host_t *vha, int32_t id, const char *fmt, ...)
 		pr_warn("%s [%s]-%04x: : %pV",
 			QL_MSGHDR, "0000:00:00.0", id + ql_dbg_offset, &vaf);
 	}
+	}
 
 	va_end(va);
 
 }
+
+EXPORT_SYMBOL(ql_dbg);
 
 /*
  * This function is for formatting and logging debug information.
@@ -2542,6 +2700,32 @@ ql_dbg_pci(uint32_t level, struct pci_dev *pdev, int32_t id,
 	vaf.fmt = fmt;
 	vaf.va = &va;
 
+#ifdef LOG2CIRC
+	if (log2circ_buf)
+	{
+		unsigned long flags;
+		spin_lock_irqsave(&log2circ_lock,flags);
+		if (log2circ_buf)
+		{
+			if (log2circ_free)
+			{
+				int rc = vsnprintf(log2circ_wr_ptr,log2circ_free,fmt,va);
+				if (rc<0 || rc>log2circ_free)
+				{
+					log2circ_free = 0;
+				}
+				else
+				{
+					rc+=1; // include null
+					log2circ_free -= rc;
+					log2circ_wr_ptr+= rc;
+				}
+			}
+		}
+		spin_unlock_irqrestore(&log2circ_lock,flags);
+	}
+	else
+#endif
 	/* <module-name> <dev-name>:<msg-id> Message */
 	pr_warn("%s [%s]-%04x: : %pV",
 		QL_MSGHDR, dev_name(&(pdev->dev)), id + ql_dbg_offset, &vaf);
