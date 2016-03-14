@@ -12,7 +12,7 @@
 #if !defined(_QLA_IP_H_)
 #define _QLA_IP_H_
 
-#define MAX_SEND_PACKETS		32	/* Maximum # send packets */
+// defined in qla_def.h #define MAX_SEND_PACKETS		32	/* Maximum # send packets */
 #define MAX_RECEIVE_BUFFERS		64	/* Maximum # receive buffers */
 #define MIN_RECEIVE_BUFFERS		8	/* Minimum # receive buffers */
 #define IP_BUFFER_QUEUE_DEPTH		(MAX_RECEIVE_BUFFERS+1)

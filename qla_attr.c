@@ -1835,6 +1835,118 @@ qla2x00_issue_lip(struct Scsi_Host *shost)
 	return 0;
 }
 
+struct fc_host_statistics *
+qla2x00_get_fc_host_stats_foo(scsi_qla_host_t* vha)
+{
+	struct qla_hw_data *ha = vha->hw;
+	struct scsi_qla_host *base_vha = pci_get_drvdata(ha->pdev);
+	int rval;
+	struct link_statistics *stats;
+	dma_addr_t stats_dma;
+	struct fc_host_statistics *pfc_host_stat;
+
+	pfc_host_stat = &vha->fc_host_stat;
+	memset(pfc_host_stat, -1, sizeof(struct fc_host_statistics));
+
+	if (IS_QLAFX00(vha->hw))
+		goto done;
+
+	if (test_bit(UNLOADING, &vha->dpc_flags))
+		goto done;
+
+	if (unlikely(pci_channel_offline(ha->pdev)))
+		goto done;
+
+	if (qla2x00_reset_active(vha))
+		goto done;
+
+	stats = dma_alloc_coherent(&ha->pdev->dev,
+	    sizeof(struct link_statistics), &stats_dma, GFP_KERNEL);
+	if (stats == NULL) {
+		ql_log(ql_log_warn, vha, 0x707d,
+		    "Failed to allocate memory for stats.\n");
+		goto done;
+	}
+	memset(stats, 0, DMA_POOL_SIZE);
+
+	rval = QLA_FUNCTION_FAILED;
+	if (IS_FWI2_CAPABLE(ha)) {
+		rval = qla24xx_get_isp_stats(base_vha, stats, stats_dma);
+	} else if (atomic_read(&base_vha->loop_state) == LOOP_READY &&
+	    !ha->dpc_active) {
+		/* Must be in a 'READY' state for statistics retrieval. */
+		rval = qla2x00_get_link_status(base_vha, base_vha->loop_id,
+						stats, stats_dma);
+	}
+
+	if (rval != QLA_SUCCESS)
+		goto done_free;
+
+#if 0
+       uint32_t inval_crc_cnt;
+        uint32_t lip_cnt;
+        uint32_t link_up_cnt;
+        uint32_t link_down_loop_init_tmo;
+        uint32_t link_down_los;
+        uint32_t link_down_loss_rcv_clk;
+        uint32_t reserved0[5];
+        uint32_t port_cfg_chg;
+        uint32_t reserved1[11];
+        uint32_t rsp_q_full;
+        uint32_t atio_q_full;
+        uint32_t drop_ae;
+        uint32_t els_proto_err;
+        uint32_t reserved2;
+        uint32_t tx_frames;
+        uint32_t rx_frames;
+        uint32_t discarded_frames;
+        uint32_t dropped_frames;
+        uint32_t reserved3;
+        uint32_t nos_rcvd;
+        uint32_t reserved4[4];
+        uint32_t tx_prjt;
+        uint32_t rcv_exfail;
+        uint32_t rcv_abts;
+        uint32_t seq_frm_miss;
+        uint32_t corr_err;
+        uint32_t mb_rqst;
+        uint32_t nport_full;
+        uint32_t eofa;
+
+#endif
+
+	pfc_host_stat->link_failure_count = stats->link_fail_cnt;
+	pfc_host_stat->loss_of_sync_count = stats->loss_sync_cnt;
+	pfc_host_stat->loss_of_signal_count = stats->loss_sig_cnt;
+	pfc_host_stat->prim_seq_protocol_err_count = stats->prim_seq_err_cnt;
+	pfc_host_stat->invalid_tx_word_count = stats->inval_xmit_word_cnt;
+	pfc_host_stat->invalid_crc_count = stats->inval_crc_cnt + (vha->qla_stats.input_bytes >> 20) + (vha->qla_stats.output_bytes >> 20);
+	if (IS_FWI2_CAPABLE(ha)) {
+		pfc_host_stat->lip_count = stats->lip_cnt;
+		pfc_host_stat->tx_frames = stats->tx_frames;
+		pfc_host_stat->rx_frames = stats->rx_frames;
+		pfc_host_stat->dumped_frames = stats->discarded_frames;
+		pfc_host_stat->nos_count = stats->nos_rcvd;
+		pfc_host_stat->error_frames =
+			stats->dropped_frames + stats->discarded_frames;
+		pfc_host_stat->rx_words = vha->qla_stats.input_bytes;
+		pfc_host_stat->tx_words = vha->qla_stats.output_bytes;
+	}
+	pfc_host_stat->fcp_control_requests = vha->qla_stats.control_requests;
+	pfc_host_stat->fcp_input_requests = vha->qla_stats.input_requests;
+	pfc_host_stat->fcp_output_requests = vha->qla_stats.output_requests;
+	pfc_host_stat->fcp_input_megabytes = vha->qla_stats.input_bytes >> 20;
+	pfc_host_stat->fcp_output_megabytes = vha->qla_stats.output_bytes >> 20;
+	pfc_host_stat->seconds_since_last_reset =
+		get_jiffies_64() - vha->qla_stats.jiffies_at_last_reset;
+	do_div(pfc_host_stat->seconds_since_last_reset, HZ);
+
+done_free:
+	dma_free_coherent(&ha->pdev->dev, sizeof(struct link_statistics),
+	    stats, stats_dma);
+done:
+	return pfc_host_stat;
+}
 static struct fc_host_statistics *
 qla2x00_get_fc_host_stats(struct Scsi_Host *shost)
 {

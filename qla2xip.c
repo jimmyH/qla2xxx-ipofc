@@ -418,7 +418,10 @@ qla2xip_send_completion(struct send_cb *scb)
 	qla2xip_free_send_cb(scb);
 
 	/* Start queueing of packets if stopped */
-	netif_wake_queue(dev);
+	if (netif_queue_stopped(dev))
+	{
+		netif_wake_queue(dev);
+	}
 }
 
 /**
@@ -444,6 +447,8 @@ qla2xip_receive_packets(struct net_device *dev, struct buffer_cb *bcb)
 	struct ethhdr *eth;
 	struct sk_buff *skb;
 	struct packet_header *packethdr;
+
+ql_dbg(ql_dbg_disc, NULL, 0x0, "qla2xip_receive_packets()\n");
 
 	/* TODO: Interrogate firmware completion status */
 
@@ -476,6 +481,7 @@ qla2xip_receive_packets(struct net_device *dev, struct buffer_cb *bcb)
 		skb_put(skb, pkt_len);
 		skb->protocol = eth_type_trans(skb, dev);
 
+ql_dbg(ql_dbg_disc, NULL, 0x0, "qla2xip_receive_packets() xx=%02x%02x %02x%02x\n",(skb->len>100) ? skb->data[30] : 0,(skb->len>100) ? skb->data[31] : 0,(skb->len>100) ? skb->data[32] : 0,(skb->len>100) ? skb->data[33] : 0);
 		/* Indicate receive packet */
 		netif_rx(skb);
 		dev->last_rx = jiffies;
@@ -502,6 +508,7 @@ qla2xip_receive_packets(struct net_device *dev, struct buffer_cb *bcb)
 			if (qdev->receive_q_in == qdev->receive_q_end)
 				qdev->receive_q_in = qdev->receive_q;
 			qdev->receive_q_add_cnt++;
+
 		} else {
 			printk(KERN_ERR
 			       "%s: %s - Failed to allocate buffer_cb skb, "
@@ -574,6 +581,8 @@ qla2xip_receive_packets(struct net_device *dev, struct buffer_cb *bcb)
 
 	/* Update (RISC) free buffer count */
 	qdev->receive_q_cnt -= bcb->linked_bcb_cnt;
+
+ql_dbg(ql_dbg_disc, NULL, 0x0, "qla2xip_receive_packets() rx_q_add_cnt=%d rx_q_cnt=%d\n",qdev->receive_q_add_cnt,qdev->receive_q_cnt);
 
 	/* Pass receive buffers to SCSI driver */
 	if (qdev->receive_q_add_cnt >= RECEIVE_BUFFERS_ADD_MARK ||
@@ -651,7 +660,7 @@ qla2xip_send(struct sk_buff *skb, struct net_device *dev)
 			/* Packet successfully sent to ISP */
 			/* Move up */
 			/*dev->trans_start = jiffies; */
-			return 0;
+			return NETDEV_TX_OK;
 		} else if (status == QL_STATUS_RESOURCE_ERROR) {
 			/* ISP too busy now, try later */
 			printk(KERN_WARNING
@@ -662,18 +671,18 @@ qla2xip_send(struct sk_buff *skb, struct net_device *dev)
 			qdev->stats.tx_errors++;
 			qdev->stats.tx_fifo_errors++;
 			netif_stop_queue(dev);
-			return 1;
+			return NETDEV_TX_BUSY;
 		} else {
 			/* Error, don't send packet */
 			printk(KERN_ERR
 			       "%s: %s - Unable to send packet -- Bad error "
-			       "occured!!!\n", qla_name, dev->name);
+			       "occured (status=%d)!!!\n", qla_name, dev->name,status);
 			/* Free send control block */
 			qla2xip_free_send_cb(scb);
 			dev_kfree_skb(skb);
 			qdev->stats.tx_errors++;
 			qdev->stats.tx_aborted_errors++;
-			return 0;
+			return NET_XMIT_DROP;
 		}
 	} else {
 		/* Out of send control blocks, pause queueing of packets */
@@ -683,7 +692,7 @@ qla2xip_send(struct sk_buff *skb, struct net_device *dev)
 		qdev->stats.tx_errors++;
 		qdev->stats.tx_fifo_errors++;
 		netif_stop_queue(dev);
-		return 1;
+		return NETDEV_TX_BUSY;
 	}
 }
 
@@ -1074,6 +1083,7 @@ qla2xip_exit(void)
 	struct net_device *next;
 
 #ifdef LOG2CIRC
+	ql2xextended_error_logging=0x0;
 	qla2xxx_log2circ_exit();
 #endif
 

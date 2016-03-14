@@ -14,6 +14,8 @@ int qla2x00_mailbox_command(scsi_qla_host_t *vha, mbx_cmd_t *mcp);
 void qla2x00_isp_cmd(scsi_qla_host_t *vha);
 void * qla2x00_req_pkt(scsi_qla_host_t *vha);
 
+extern struct fc_host_statistics *
+qla2x00_get_fc_host_stats_foo(scsi_qla_host_t* vha);
 
 
 #define BROADCAST_4G		0x7ff
@@ -236,6 +238,7 @@ qla24xx_add_buffers(scsi_qla_host_t *ha, uint16_t unused, int ha_locked)
 
 		pkt->buffer_count++;
 		if (pkt->buffer_count == IP_POOL_BUFFERS) {
+ql_dbg(ql_dbg_disc, ha, 0x0, "qla24xx_add_buffers() %d (%d,%d,%d,%d)\n",pkt->buffer_count,pkt->buffers[0].handle,pkt->buffers[1].handle,pkt->buffers[2].handle,pkt->buffers[3].handle);
 			wmb();
 			qla2x00_isp_cmd(ha);
 			pkt = NULL;
@@ -243,6 +246,7 @@ qla24xx_add_buffers(scsi_qla_host_t *ha, uint16_t unused, int ha_locked)
 	}
 
 	if (pkt) {
+ql_dbg(ql_dbg_disc, ha, 0x0, "qla24xx_add_buffers() %d (%d,%d,%d,%d)\n",pkt->buffer_count,pkt->buffers[0].handle,pkt->buffers[1].handle,pkt->buffers[2].handle,pkt->buffers[3].handle);
 		wmb();
 		qla2x00_isp_cmd(ha);
 	}
@@ -384,6 +388,7 @@ qla24xx_ip_send_complete(scsi_qla_host_t *ha, uint32_t handle,
 {
 	struct send_cb *scb;
 
+ql_dbg(ql_dbg_disc, ha, 0x0, "qla24xx_ip_send_complete() handle=%d\n",handle);
 	/* Set packet pointer from queue entry handle */
 	if (handle < MAX_SEND_PACKETS) {
 		scb = ha->ip.active_scb_q[handle];
@@ -557,6 +562,7 @@ qla24xx_ip_receive(scsi_qla_host_t *ha, struct ip_rec_entry_24xx *iprec_entry)
 		rec_data_size = ha->ip.receive_buff_data_size;
 
 	handle = iprec_entry->buffer_handles[0];
+
 	if (handle >= ha->ip.max_receive_buffers) {
 		/* Invalid handle from RISC, reset RISC firmware */
 		printk(KERN_WARNING
@@ -581,6 +587,8 @@ qla24xx_ip_receive(scsi_qla_host_t *ha, struct ip_rec_entry_24xx *iprec_entry)
 	bcb->comp_status = comp_status;
 	bcb->packet_size = packet_size;
 	nbcb = bcb;
+
+ql_dbg(ql_dbg_disc, ha, 0x0, "%s: comp_status=%d hdr_size=%d recv_buff_data_size=%d handles=%d,%d packet_size=%d\n", __func__,comp_status,ha->ip.header_size,ha->ip.receive_buff_data_size,handle,iprec_entry->buffer_handles[1],packet_size);
 
 	/* Prepare any linked buffers */
 	for (linked_bcb_cnt = 0; linked_bcb_cnt < IP_RCV_BUFFERS;
@@ -847,6 +855,18 @@ qla2x00_ip_disable(scsi_qla_host_t *ha)
 
 	ql_dbg(ql_dbg_disc, ha, 0x0, "%s: disable adapter %ld\n", __func__, ha->host_no);
 
+//
+	{
+		struct fc_host_statistics* stat = qla2x00_get_fc_host_stats_foo(ha);
+		printk("XXXXX got statistics %p\n",stat);
+		printk("XXXXX %llu %llu %llu %llu %llu\n",stat->seconds_since_last_reset,stat->tx_frames,stat->tx_words,stat->rx_frames,stat->rx_words);
+		printk("XXXXX %llu %llu %llu %llu %llu\n",stat->lip_count,stat->nos_count,stat->error_frames,stat->dumped_frames,stat->link_failure_count);
+		printk("XXXXX %llu %llu %llu %llu %llu\n",stat->loss_of_sync_count,stat->loss_of_signal_count,stat->prim_seq_protocol_err_count,stat->invalid_tx_word_count,stat->invalid_crc_count);
+
+	}
+//
+
+
 	/* Wait for a ready state from the adapter */
 	while (!ha->flags.init_done || ha->hw->dpc_active) {
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -1088,6 +1108,7 @@ qla24xx_send_packet(scsi_qla_host_t *ha, struct send_cb *scb)
 	struct sk_buff *skb;
 	struct device_reg_24xx __iomem *reg;
 
+ql_dbg(ql_dbg_disc, ha, 0x0, "qla24xx_send_packet() marker_needed=%d\n",ha->marker_needed);
 	skb = scb->skb;
 	reg = (struct device_reg_24xx __iomem *)ha->hw->iobase;
 
@@ -1109,6 +1130,16 @@ qla24xx_send_packet(scsi_qla_host_t *ha, struct send_cb *scb)
 
 	/* Acquire ring specific lock */
 	spin_lock_irqsave(&ha->hw->hardware_lock, flags);
+
+#if 0
+// noddy (failed attempt to limit multiple outstanding IP requests)
+if (ha->ip.ipreq_cnt>=2)
+{
+	spin_unlock_irqrestore(&ha->hw->hardware_lock, flags);
+	//FOO return QL_STATUS_RESOURCE_ERROR;
+	return QLA_MEMORY_ALLOC_FAILED;
+}
+#endif
 
 	if (ha->req->cnt < 4) {
 		/* Update number of free request entries */
@@ -1217,6 +1248,11 @@ found_handle:
 
 	ha->ip.ipreq_cnt++;
 	ha->ip.active_scb_q[handle] = scb;
+
+ql_dbg(ql_dbg_disc, ha, 0x0, "qla24xx_send_packet() handle=%d byte_count=%d %d %d %d %d xx=%02x%02x %02x%02x\n",(unsigned int)ha->ip.current_scb_q_idx,
+	(unsigned int)ipcmd_entry->byte_count,(unsigned int)ha->req->cnt,(unsigned int)ha->ip.ipreq_cnt,(unsigned int)ha->req->ring_index,(unsigned int)RD_REG_DWORD_RELAXED(&reg->req_q_out),
+	(skb->len>100) ? skb->data[30] : 0,(skb->len>100) ? skb->data[31] : 0,(skb->len>100) ? skb->data[32] : 0,(skb->len>100) ? skb->data[33] : 0);
+//FOO
 
 	/* Set chip new ring index. */
 	WRT_REG_DWORD(&reg->req_q_in, ha->req->ring_index);

@@ -596,6 +596,7 @@ qla2x00_async_event(scsi_qla_host_t *vha, struct rsp_que *rsp, uint16_t *mb)
 	unsigned long	flags;
 	fc_port_t	*fcport = NULL;
 
+ql_dbg(ql_dbg_async, vha, 0x5042, "qla24xx_async_event()\n");
 	/* Setup to process RIO completion. */
 	handle_cnt = 0;
 	if (IS_CNA_CAPABLE(ha))
@@ -2550,6 +2551,7 @@ void qla24xx_process_response_queue(struct scsi_qla_host *vha,
 		} else {
 			rsp->ring_ptr++;
 		}
+ql_dbg(ql_dbg_async, vha, 0x5042, "qla24xx_process_response_queue(%d %d) %d\n",pkt->entry_status,pkt->entry_type,(unsigned int)rsp->ring_index);
 
 		if (pkt->entry_status != 0) {
 			qla2x00_error_entry(vha, rsp, (sts_entry_t *) pkt);
@@ -2611,6 +2613,11 @@ void qla24xx_process_response_queue(struct scsi_qla_host *vha,
                 case IP_RECEIVE_24XX:
                         qla24xx_ip_receive(vha, (struct ip_rec_entry_24xx *)pkt);
                         break;
+		case IP_LOAD_POOL_24XX:
+			// We get a response everytime we add buffers with
+			// IP_LOAD_POOL_24XX.
+			// For now we will just ignore them.
+			break;
 		default:
 			/* Type Not Supported. */
 			ql_dbg(ql_dbg_async, vha, 0x5042,
@@ -2720,6 +2727,7 @@ qla24xx_intr_handler(int irq, void *dev_id)
 
 	spin_lock_irqsave(&ha->hardware_lock, flags);
 	vha = pci_get_drvdata(ha->pdev);
+ql_dbg(ql_dbg_async, vha, 0x5042, "qla24xx_intr_handler()\n");
 	for (iter = 50; iter--; ) {
 		stat = RD_REG_DWORD(&reg->host_status);
 		if (qla2x00_check_reg_for_disconnect(vha, stat))
@@ -2807,6 +2815,7 @@ qla24xx_msix_rsp_q(int irq, void *dev_id)
 	spin_lock_irqsave(&ha->hardware_lock, flags);
 
 	vha = pci_get_drvdata(ha->pdev);
+ql_dbg(ql_dbg_async, vha, 0x5042, "qla24xx_msix_rsp_q()\n");
 	/*
 	 * Use host_status register to check to PCI disconnection before we
 	 * we process the response queue.
@@ -2885,6 +2894,7 @@ qla24xx_msix_default(int irq, void *dev_id)
 
 	spin_lock_irqsave(&ha->hardware_lock, flags);
 	vha = pci_get_drvdata(ha->pdev);
+ql_dbg(ql_dbg_async, vha, 0x5042, "qla24xx_msix_default()\n");
 	do {
 		stat = RD_REG_DWORD(&reg->host_status);
 		if (qla2x00_check_reg_for_disconnect(vha, stat))

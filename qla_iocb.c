@@ -2881,7 +2881,7 @@ qla2x00_isp_cmd(scsi_qla_host_t *vha)
 {
 	struct qla_hw_data *ha = vha->hw;
 
-        ql_dbg(ql_dbg_disc, vha, 0x0, "%s(): IOCB data:\n", __func__);
+        //ql_dbg(ql_dbg_disc, vha, 0x0, "%s(): IOCB data:\n", __func__);
         //DEBUG5(qla2x00_dump_buffer(
         //    (uint8_t *)vha->req->ring_ptr, REQUEST_ENTRY_SIZE));
 
@@ -2965,6 +2965,7 @@ qla2x00_req_pkt(scsi_qla_host_t *vha)
 
                 /* Release ring specific lock */
                 spin_unlock(&ha->hardware_lock);
+ql_dbg(ql_dbg_disc, vha, 0x0, "%s() %d\n", __func__,timer);
 
                 udelay(2);   /* 2 us */
 
