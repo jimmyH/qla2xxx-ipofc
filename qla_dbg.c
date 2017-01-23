@@ -11,26 +11,24 @@
  * ----------------------------------------------------------------------
  * |             Level            |   Last Value Used  |     Holes	|
  * ----------------------------------------------------------------------
- * | Module Init and Probe        |       0x0190       | 0x0146		|
+ * | Module Init and Probe        |       0x0194       | 0x0146		|
  * |                              |                    | 0x015b-0x0160	|
- * | Mailbox commands             |       0x118d       | 0x1019,	|
- * |                              |                    | 0x1115-0x1116 	|
- * |                              |                    | 0x111a-0x111b 	|
- * |                              |                    | 0x1155-0x1158  |
- * | Device Discovery             |       0x20ff       | 0x2016         |
- * |                              |                    | 0x2020-0x2022  |
- * |				  |		       | 0x2024-0x2e 	|
- * |				  |		       | 0x2030		|
- * |				  |		       | 0x2034-0x203e  |
- * |				  |		       | 0x2040,0x2041  |
- * |				  | 		       | 0x204b         |
- * |				  | 		       | 0x2076,0x2079  |
- * |				  |	 	       | 0x2085        |
- * |                              |                    | 0x209f        |
- * |                              |                    | 0x20b1-0x20bf |
- * |                              |                    | 0x20d7-0x20df |
- * |                              |                    | 0x20e7,0x20ef |
- * |                              |                    | 0x20f7-0x20fe |
+ * | Mailbox commands             |       0x1199       | 0x1155-0x1158	|
+ * |                              |                    | 0x1193		|
+ * | Device Discovery             |       0x2003       | 0x2016		|
+ * |                              |                    | 0x2020-0x2022	|
+ * |                              |                    | 0x2024-0x202e	|
+ * |                              |                    | 0x2030		|
+ * |                              |                    | 0x2034-0x203e	|
+ * |                              |                    | 0x2040,0x2041	|
+ * |                              |                    | 0x204b		|
+ * |                              |                    | 0x2076,0x2079	|
+ * |                              |                    | 0x2085		|
+ * |                              |                    | 0x209f		|
+ * |                              |                    | 0x20b1-0x20bf	|
+ * |                              |                    | 0x20d7-0x20df	|
+ * |                              |                    | 0x20e7,0x20ef	|
+ * |                              |                    | 0x20f7-0x20fe	|
  * | Queue Command and IO tracing |       0x3060       | 0x3006-0x300b  |
  * |                              |                    | 0x3027-0x3028  |
  * |                              |                    | 0x303d-0x3041  |
@@ -38,23 +36,25 @@
  * |                              |                    | 0x3036,0x3038  |
  * |                              |                    | 0x303a		|
  * | DPC Thread                   |       0x4027       | 0x4002,0x4013  |
- * | Async Events                 |       0x5089       | 0x502b-0x502f  |
+ * | Async Events                 |       0x508b       | 0x502b-0x502f  |
  * |                              |                    | 0x5044,0x5047  |
  * |                              |                    | 0x5075,0x5084	|
  * |                              |                    | 0x503a,0x503d  |
  * |                              |                    | 0x505e,        |
  * |                              |                    | 0x505f         |
  * | Timer Routines               |       0x6012       |                |
- * | User Space Interactions      |       0x70e5       | 0x7018,0x702e  |
+ * | User Space Interactions      |       0x70e6       | 0x7018,0x702e  |
  * |				  |		       | 0x7020,0x7024  |
  * |                              |                    | 0x7039,0x7045  |
  * |                              |                    | 0x7073-0x7075  |
  * |                              |                    | 0x70a5-0x70a6  |
  * |                              |                    | 0x70a8,0x70ab  |
  * |                              |                    | 0x70ad-0x70ae  |
- * |                              |                    | 0x70d7-0x70db  |
+ * |				  |		       | 0x70d1-0x70d6	|	
+ * |                              |                    | 0x70d8-0x70db  |
  * |                              |                    | 0x70de-0x70df  |
- * | Task Management              |       0x803d       | 0x8000,0x800b  |
+ * |				  |		       | 0x70e2		|	
+ * | Task Management              |       0x8042       | 0x8000,0x800b  |
  * |                              |                    | 0x8019         |
  * |                              |                    | 0x8025,0x8026  |
  * |                              |                    | 0x8031,0x8032  |
@@ -1426,7 +1426,7 @@ qla25xx_fw_dump(scsi_qla_host_t *vha, int hardware_locked)
 
 	/* Mailbox registers. */
 	mbx_reg = &reg->mailbox0;
-	for (cnt = 0; cnt < sizeof(fw->mailbox_reg) / 2; cnt++, mbx_reg)
+	for (cnt = 0; cnt < sizeof(fw->mailbox_reg) / 2; cnt++, mbx_reg++)
 		fw->mailbox_reg[cnt] = htons(RD_REG_WORD(mbx_reg));
 
 	/* Transfer sequence registers. */
@@ -2690,29 +2690,24 @@ ql_dump_regs(uint32_t level, scsi_qla_host_t *vha, int32_t id)
 
 void
 ql_dump_buffer(uint32_t level, scsi_qla_host_t *vha, int32_t id,
-	uint8_t *b, uint32_t size)
+	uint8_t *buf, uint size)
 {
-	uint32_t cnt;
-	uint8_t c;
+	uint cnt;
 
 	if (!ql_mask_match(level))
 		return;
 
-	ql_dbg(level, vha, id, " 0   1   2   3   4   5   6   7   8   "
-	    "9  Ah  Bh  Ch  Dh  Eh  Fh\n");
-	ql_dbg(level, vha, id, "----------------------------------"
-	    "----------------------------\n");
-
-	ql_dbg(level, vha, id, " ");
-	for (cnt = 0; cnt < size;) {
-		c = *b++;
-		printk("%02x", (uint32_t) c);
-		cnt++;
-		if (!(cnt % 16))
+	ql_dbg(level, vha, id,
+	    "%-+5d  0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F\n", size);
+	ql_dbg(level, vha, id,
+	    "----- -----------------------------------------------\n");
+	for (cnt = 0; cnt < size; cnt++, buf++) {
+		if (cnt % 16 == 0)
+			ql_dbg(level, vha, id, "%04x:", cnt & ~0xFU);
+		printk(" %02x", *buf);
+		if (cnt % 16 == 15)
 			printk("\n");
-		else
-			printk("  ");
 	}
-	if (cnt % 16)
-		ql_dbg(level, vha, id, "\n");
+	if (cnt % 16 != 0)
+		printk("\n");
 }

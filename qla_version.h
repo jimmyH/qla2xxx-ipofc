@@ -1,13 +1,13 @@
 /*
  * QLogic Fibre Channel HBA Driver
- * Copyright (c)  2003-2014 QLogic Corporation
+ * Copyright (c)  2003-2016 QLogic Corporation
  *
  * See LICENSE.qla2xxx for copyright and licensing details.
  */
 /*
  * Driver version
  */
-#define QLA2XXX_VERSION      "8.07.00.34.12.0-k"
+#define QLA2XXX_VERSION      "8.07.00.45.07.0-k"
 
 #define QLA_DRIVER_MAJOR_VER	8
 #define QLA_DRIVER_MINOR_VER	7

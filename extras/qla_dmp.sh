@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # QLogic ISP2x00 device driver dump reader
-# Copyright (C) 2003-2014 QLogic Corporation
+# Copyright (C) 2003-2016 QLogic Corporation
 # (www.qlogic.com)
 # 
 # This program is free software; you can redistribute it and/or modify it

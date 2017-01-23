@@ -1,7 +1,7 @@
 #include <target/target_core_base.h>
 #include <linux/btree.h>
 
-#define TCM_QLA2XXX_VERSION	"v0.1"
+#define TCM_QLA2XXX_VERSION	QLA2XXX_VERSION
 /* length of ASCII WWPNs including pad */
 #define TCM_QLA2XXX_NAMELEN	32
 /* lenth of ASCII NPIV 'WWPN+WWNN' including pad */
@@ -29,7 +29,6 @@ struct tcm_qla2xxx_tpg_attrib {
 	int cache_dynamic_acls;
 	int demo_mode_write_protect;
 	int prod_mode_write_protect;
-	int demo_mode_login_only;
 };
 
 struct tcm_qla2xxx_tpg {

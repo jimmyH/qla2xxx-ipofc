@@ -131,16 +131,21 @@ bool
 qla2x00_check_reg_for_disconnect(scsi_qla_host_t *vha, uint32_t reg)
 {
 	/* Check for PCI disconnection */
-	if (reg == 0xffffffff) {
-		/*
-		 * Schedule this on the default system workqueue so that all the
-		 * adapter workqueues and the DPC thread can be shutdown
-		 * cleanly.
-		 */
-		schedule_work(&vha->hw->board_disable);
+	if (reg == 0xffffffff ) {
+		if (!test_and_set_bit(PFLG_DISCONNECTED, &vha->pci_flags) &&
+			!test_bit(PFLG_DRIVER_REMOVING, &vha->pci_flags) &&
+			!test_bit(PFLG_DRIVER_PROBING, &vha->pci_flags)) {
+			/*
+			 * Schedule this on the default system workqueue so that all the
+			 * adapter workqueues and the DPC thread can be shutdown
+			 * cleanly.
+			 */
+			schedule_work(&vha->hw->board_disable);
+		}
 		return true;
-	} else
-		return false;
+	}
+
+	return false;
 }
 
 /**
@@ -565,14 +570,48 @@ qla2x00_is_a_vp_did(scsi_qla_host_t *vha, uint32_t rscn_entry)
 	return ret;
 }
 
-static inline fc_port_t *
+
+fc_port_t *
 qla2x00_find_fcport_by_loopid(scsi_qla_host_t *vha, uint16_t loop_id)
 {
-	fc_port_t *fcport;
+	fc_port_t *f, *tf;
+	f=tf=NULL;
+	list_for_each_entry_safe(f, tf, &vha->vp_fcports, list)
+		if (f->loop_id == loop_id)
+			return f;
+	return NULL;
+}
 
-	list_for_each_entry(fcport, &vha->vp_fcports, list)
-		if (fcport->loop_id == loop_id)
-			return fcport;
+fc_port_t *
+qla2x00_find_fcport_by_wwpn(scsi_qla_host_t *vha, u8 *wwpn, u8 incl_deleted)
+{
+	fc_port_t *f, *tf;
+	f=tf=NULL;
+	list_for_each_entry_safe(f, tf, &vha->vp_fcports, list) {
+		if (memcmp(f->port_name,wwpn, WWN_SIZE) == 0) {
+			if (incl_deleted)
+				return f;
+			else if (f->deleted == 0)
+				return f;
+		}
+	}
+	return NULL;
+}
+
+fc_port_t *
+qla2x00_find_fcport_by_nportid(scsi_qla_host_t *vha, port_id_t *id,
+	u8 incl_deleted)
+{
+	fc_port_t *f, *tf;
+	f=tf=NULL;
+	list_for_each_entry_safe(f, tf, &vha->vp_fcports, list) {
+		if (f->d_id.b24 == id->b24) {
+			if (incl_deleted)
+				return f;
+			else if (f->deleted == 0)
+				return f;
+		}
+	}
 	return NULL;
 }
 
@@ -591,7 +630,7 @@ qla2x00_async_event(scsi_qla_host_t *vha, struct rsp_que *rsp, uint16_t *mb)
 	struct device_reg_2xxx __iomem *reg = &ha->iobase->isp;
 	struct device_reg_24xx __iomem *reg24 = &ha->iobase->isp24;
 	struct device_reg_82xx __iomem *reg82 = &ha->iobase->isp82;
-	uint32_t	rscn_entry, host_pid, tmp_pid;
+	uint32_t	rscn_entry, host_pid;
 	unsigned long	flags;
 	fc_port_t	*fcport = NULL;
 
@@ -711,16 +750,23 @@ skip_rio:
 
 	case MBA_RSP_TRANSFER_ERR:	/* Response Transfer Error */
 		ql_log(ql_log_warn, vha, 0x5007,
-		    "ISP Response Transfer Error.\n");
+		    "ISP Response Transfer Error (%x). \n", mb[1]);
 
 		set_bit(ISP_ABORT_NEEDED, &vha->dpc_flags);
 		break;
 
 	case MBA_WAKEUP_THRES:		/* Request Queue Wake-up */
 		ql_dbg(ql_dbg_async, vha, 0x5008,
-		    "Asynchronous WAKEUP_THRES.\n");
+		    "Asynchronous WAKEUP_THRES (%x).\n", mb[1]);
 
 		break;
+	case MBA_LOOP_INIT_ERR:
+	    ql_log(ql_log_warn, vha, 0x508b,
+		"LOOP INIT ERROR (%x).\n", mb[1]);
+	    ha->isp_ops->fw_dump(vha, 1);
+	    set_bit(ISP_ABORT_NEEDED, &vha->dpc_flags);
+	    break;
+
 	case MBA_LIP_OCCURRED:		/* Loop Initialization Procedure */
 		ql_dbg(ql_dbg_async, vha, 0x5009,
 		    "LIP occurred (%x).\n", mb[1]);
@@ -929,6 +975,8 @@ skip_rio:
 			    "Marking port lost loopid=%04x portid=%06x.\n",
 			    fcport->loop_id, fcport->d_id.b24);
 			qla2x00_mark_device_lost(fcport->vha, fcport, 1, 1);
+			fcport->logout_on_delete = 0;
+			qlt_schedule_sess_for_deletion_lock(fcport);
 			break;
 
 global_port_update:
@@ -1023,26 +1071,18 @@ global_port_update:
 		if (qla2x00_is_a_vp_did(vha, rscn_entry))
 			break;
 
-		/*
-		 * Search for the rport related to this RSCN entry and mark it
-		 * as lost.
-		 */
-		list_for_each_entry(fcport, &vha->vp_fcports, list) {
-			if (atomic_read(&fcport->state) != FCS_ONLINE)
-				continue;
-			tmp_pid = fcport->d_id.b24;
-			if (fcport->d_id.b24 == rscn_entry) {
-				qla2x00_mark_device_lost(vha, fcport, 0, 1);
-				break;
-			}
-		}
-
 		atomic_set(&vha->loop_down_timer, 0);
 		vha->flags.management_server_logged_in = 0;
+		{
+			struct event_arg ea;
+			memset(&ea, 0, sizeof(ea));
+			ea.event = FCME_RSCN;
+			ea.id.b24 = rscn_entry;
+			ea.id.b.rsvd_1 = rscn_entry >> 24;
+			qla2x00_fcport_event_handler(vha,&ea);
+			qla2x00_post_aen_work(vha, FCH_EVT_RSCN, rscn_entry);
+		}
 
-		set_bit(LOOP_RESYNC_NEEDED, &vha->dpc_flags);
-		set_bit(RSCN_UPDATE, &vha->dpc_flags);
-		qla2x00_post_aen_work(vha, FCH_EVT_RSCN, rscn_entry);
 		break;
 
 	/* case MBA_RIO_RESPONSE: */
@@ -1156,10 +1196,18 @@ global_port_update:
 
 	case MBA_DPORT_DIAGNOSTICS:
 		ql_dbg(ql_dbg_async, vha, 0x5052,
-		    "D-Port Diagnostics: %04x %04x=%s\n", mb[0], mb[1],
+		    "D-Port Diagnostics: %04x result=%s\n",
+		    mb[0],
 		    mb[1] == 0 ? "start" :
-		    mb[1] == 1 ? "done (ok)" :
+		    mb[1] == 1 ? "done (pass)" :
 		    mb[1] == 2 ? "done (error)" : "other");
+		break;
+
+	case MBA_TEMPERATURE_ALERT:
+		ql_dbg(ql_dbg_async, vha, 0x508a,
+		    "TEMPERATURE ALERT: %04x %04x %04x\n", mb[1], mb[2], mb[3]);
+		if (mb[1] == 0x12)
+			schedule_work(&ha->board_disable);
 		break;
 
 	default:
@@ -1204,7 +1252,7 @@ qla2x00_process_completed_request(struct scsi_qla_host *vha,
 		req->outstanding_cmds[index] = NULL;
 
 		/* Save ISP completion status */
-		sp->done(ha, sp, DID_OK << 16);
+		sp->done(vha, sp, DID_OK << 16);
 	} else {
 		ql_log(ql_log_warn, vha, 0x3016, "Invalid SCSI SRB.\n");
 
@@ -1227,7 +1275,8 @@ qla2x00_get_sp_from_handle(scsi_qla_host_t *vha, const char *func,
 	index = LSW(pkt->handle);
 	if (index >= req->num_outstanding_cmds) {
 		ql_log(ql_log_warn, vha, 0x5031,
-		    "Invalid command index (%x).\n", index);
+			   "Invalid command index (%x) type %8ph.\n",
+			   index, iocb);
 		if (IS_P3P_TYPE(ha))
 			set_bit(FCOE_CTX_RESET_NEEDED, &vha->dpc_flags);
 		else
@@ -1335,6 +1384,35 @@ logio_done:
 }
 
 static void
+qla24xx_mbx_iocb_entry(scsi_qla_host_t *vha, struct req_que *req,
+    struct mbx_24xx_entry *pkt)
+{
+	const char func[] = "MBX-IOCB2";
+	const char *type;
+	srb_t *sp;
+	struct srb_iocb *si;
+	u16 sz,i;
+	int res;
+
+	sp = qla2x00_get_sp_from_handle(vha, func, req, pkt);
+	if (!sp)
+		return;
+
+	type = sp->name;
+
+	si = &sp->u.iocb_cmd;
+	sz = min(ARRAY_SIZE(pkt->mb),
+			 ARRAY_SIZE(sp->u.iocb_cmd.u.mbx.in_mb));
+
+	for (i=0; i<sz; i++)
+		si->u.mbx.in_mb[i] = le16_to_cpu(pkt->mb[i]);
+
+	res = (si->u.mbx.in_mb[0] & MBS_MASK);
+
+	sp->done(vha, sp, res);
+}
+
+static void
 qla2x00_ct_entry(scsi_qla_host_t *vha, struct req_que *req,
     sts_entry_t *pkt, int iocb_type)
 {
@@ -1343,12 +1421,14 @@ qla2x00_ct_entry(scsi_qla_host_t *vha, struct req_que *req,
 	srb_t *sp;
 	struct fc_bsg_job *bsg_job;
 	uint16_t comp_status;
-	int res;
+	int res=0;
 
 	sp = qla2x00_get_sp_from_handle(vha, func, req, pkt);
 	if (!sp)
 		return;
 
+	switch (sp->type) {
+	case SRB_CT_CMD:
 	bsg_job = sp->u.bsg_job;
 
 	type = "ct pass-through";
@@ -1388,6 +1468,17 @@ qla2x00_ct_entry(scsi_qla_host_t *vha, struct req_que *req,
 		bsg_job->reply_len = 0;
 	}
 
+	break;
+	case SRB_CT_PTHRU_CMD:
+		/* borrowing sts_entry_24xx.comp_status.
+		   same location as ct_entry_24xx.comp_status
+		*/
+		res = qla2x00_chk_ms_status(vha, (ms_iocb_entry_t *)pkt,
+		    (struct ct_sns_rsp *)sp->u.iocb_cmd.u.ctarg.rsp,
+		    sp->name);
+		break;
+	}
+
 	sp->done(vha, sp, res);
 }
 
@@ -1418,6 +1509,16 @@ qla24xx_els_ct_entry(scsi_qla_host_t *vha, struct req_que *req,
 	case SRB_CT_CMD:
 		type = "ct pass-through";
 		break;
+	case SRB_CT_PTHRU_CMD:
+		/* borrowing sts_entry_24xx.comp_status.
+		   same location as ct_entry_24xx.comp_status
+		 */
+		res = qla2x00_chk_ms_status(vha, (ms_iocb_entry_t *)pkt,
+			(struct ct_sns_rsp*)sp->u.iocb_cmd.u.ctarg.rsp,
+			sp->name);
+		sp->done(vha, sp, res);
+		return;
+
 	default:
 		ql_dbg(ql_dbg_user, vha, 0x503e,
 		    "Unrecognized SRB: (%p) type=%d.\n", sp, sp->type);
@@ -1541,6 +1642,8 @@ qla24xx_logio_entry(scsi_qla_host_t *vha, struct req_que *req,
 
 	iop[0] = le32_to_cpu(logio->io_parameter[0]);
 	iop[1] = le32_to_cpu(logio->io_parameter[1]);
+	lio->u.logio.iop[0] = iop[0];
+	lio->u.logio.iop[1] = iop[1];
 	switch (iop[0]) {
 	case LSC_SCODE_PORTID_USED:
 		data[0] = MBS_PORT_ID_USED;
@@ -2045,6 +2148,7 @@ qla2x00_status_entry(scsi_qla_host_t *vha, struct rsp_que *rsp, void *pkt)
 	int res = 0;
 	uint16_t state_flags = 0;
 	uint16_t retry_delay = 0;
+	uint8_t no_logout=0;
 
 	sts = (sts_entry_t *) pkt;
 	sts24 = (struct sts_entry_24xx *) pkt;
@@ -2306,6 +2410,7 @@ check_scsi_status:
 		break;
 
 	case CS_PORT_LOGGED_OUT:
+		no_logout=1;
 	case CS_PORT_CONFIG_CHG:
 	case CS_PORT_BUSY:
 	case CS_INCOMPLETE:
@@ -2328,13 +2433,17 @@ check_scsi_status:
 				break;
 		}
 
-		ql_dbg(ql_dbg_io, fcport->vha, 0x3021,
-		    "Port to be marked lost on fcport=%06x, current "
-		    "port state= %s.\n", fcport->d_id.b24,
-		    port_state_str[atomic_read(&fcport->state)]);
+		if (atomic_read(&fcport->state) == FCS_ONLINE) {
+			ql_dbg(ql_dbg_io, fcport->vha, 0x3021,
+			    "Port to be marked lost on fcport=%06x, "
+			    "current port state= %s.\n", fcport->d_id.b24,
+			    port_state_str[atomic_read(&fcport->state)]);
 
-		if (atomic_read(&fcport->state) == FCS_ONLINE)
+			if (no_logout)
+				fcport->logout_on_delete = 0;
 			qla2x00_mark_device_lost(fcport->vha, fcport, 1, 1);
+			qlt_schedule_sess_for_deletion_lock(fcport);
+		}
 		break;
 
 	case CS_ABORTED:
@@ -2376,7 +2485,7 @@ out:
 		    resid_len, fw_resid_len, sp, cp);
 
 	if (rsp->status_srb == NULL)
-		sp->done(ha, sp, res);
+		sp->done(vha, sp, res);
 }
 
 /**
@@ -2433,7 +2542,7 @@ qla2x00_status_cont_entry(struct rsp_que *rsp, sts_cont_entry_t *pkt)
 	/* Place command on done queue. */
 	if (sense_len == 0) {
 		rsp->status_srb = NULL;
-		sp->done(ha, sp, cp->result);
+		sp->done(vha, sp, cp->result);
 	}
 }
 
@@ -2465,7 +2574,7 @@ qla2x00_error_entry(scsi_qla_host_t *vha, struct rsp_que *rsp, sts_entry_t *pkt)
 
 	sp = qla2x00_get_sp_from_handle(vha, func, req, pkt);
 	if (sp) {
-		sp->done(ha, sp, res);
+		sp->done(vha, sp, res);
 		return;
 	}
 fatal:
@@ -2603,6 +2712,10 @@ void qla24xx_process_response_queue(struct scsi_qla_host *vha,
 		case PUREX_IOCB_TYPE:
 		    qla24xx_purex_iocb(vha, rsp->req, pkt);
 		    break;
+		case MBX_IOCB_TYPE:
+			qla24xx_mbx_iocb_entry(vha,rsp->req,
+			    (struct mbx_24xx_entry *)pkt);
+			break;
 		default:
 			/* Type Not Supported. */
 			ql_dbg(ql_dbg_async, vha, 0x5042,

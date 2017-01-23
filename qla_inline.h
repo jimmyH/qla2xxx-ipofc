@@ -69,14 +69,14 @@ qla2x00_poll(struct rsp_que *rsp)
 static inline uint8_t *
 host_to_fcp_swap(uint8_t *fcp, uint32_t bsize)
 {
-       uint32_t *ifcp = (uint32_t *) fcp;
-       uint32_t *ofcp = (uint32_t *) fcp;
-       uint32_t iter = bsize >> 2;
+	uint32_t *ifcp = (uint32_t *)fcp;
+	uint32_t *ofcp = (uint32_t *)fcp;
+	uint32_t iter = bsize >> 2;
 
-       for (; iter ; iter--)
-               *ofcp++ = swab32(*ifcp++);
+	for ( ; iter--; ifcp++)
+		*ofcp++ = swab32(*ifcp);
 
-       return fcp;
+	return fcp;
 }
 
 static inline void
@@ -157,7 +157,8 @@ qla2x00_set_fcport_state(fc_port_t *fcport, int state)
 	/* Don't print state transitions during initial allocation of fcport */
 	if (old_state && old_state != state) {
 		ql_dbg(ql_dbg_disc, fcport->vha, 0x207d,
-		    "FCPort state transitioned from %s to %s - portid=%06x.\n",
+		    "FCPort %8phC state transitioned from %s to %s - portid=%06x.\n",
+			fcport->port_name,
 		    port_state_str[old_state], port_state_str[state],
 		    fcport->d_id.b24);
 	}
@@ -222,6 +223,7 @@ qla2x00_get_sp(scsi_qla_host_t *vha, fc_port_t *fcport, gfp_t flag)
 	memset(sp, 0, sizeof(*sp));
 	sp->fcport = fcport;
 	sp->iocbs = 1;
+	sp->vha = vha;
 done:
 	if (!sp)
 		QLA_VHA_MARK_NOT_BUSY(vha);
@@ -244,7 +246,7 @@ qla2x00_init_timer(srb_t *sp, unsigned long tmo)
 	sp->u.iocb_cmd.timer.function = qla2x00_sp_timeout;
 	add_timer(&sp->u.iocb_cmd.timer);
 	sp->free = qla2x00_sp_free;
-	if ((IS_QLAFX00(sp->fcport->vha->hw)) &&
+	if ((IS_QLAFX00(((scsi_qla_host_t*)sp->vha)->hw)) &&
 	    (sp->type == SRB_FXIOCB_DCMD))
 		init_completion(&sp->u.iocb_cmd.u.fxiocb.fxiocb_comp);
 }
